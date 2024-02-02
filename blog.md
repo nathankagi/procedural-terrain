@@ -12,6 +12,6 @@ I have to acknowledge [Sebastian Lague](https://www.youtube.com/@SebastianLague)
 
 I will be using rust and [bevy](https://bevyengine.org/) for this project.
 
-### Noise and Terrain
+### Noise
 
 To generate terrain

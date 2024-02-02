@@ -1,4 +1,6 @@
-use plotters::prelude::*;
+use bevy::prelude::*;
+use bevy::render::render_resource::PrimitiveTopology;
+use image::{DynamicImage, GenericImage, Rgba};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
@@ -83,6 +85,29 @@ fn perlin(x: f64, y: f64, z: f64, p: &Vec<i32>) -> f64 {
     return (lerp(y1, y2, w) + 1.0) / 2.0;
 }
 
+fn octave_perlin(
+    x: f64,
+    y: f64,
+    z: f64,
+    octaves: i32,
+    persistence: f64,
+    scale: f64,
+    permutation: &Vec<i32>,
+) -> f64 {
+    let mut value = 0.0;
+    for o in 0..octaves {
+        let frequency = 2.0f64.powi(o);
+        let amplitude = persistence.powi(o);
+        value += perlin(
+            x * scale * frequency,
+            y * scale * frequency,
+            z * scale * frequency,
+            &permutation,
+        ) * amplitude;
+    }
+    return value;
+}
+
 fn generate_permutation(seed: u64) -> Vec<i32> {
     let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
     let mut permutation: Vec<i32> = (0..256).collect();
@@ -93,6 +118,49 @@ fn generate_permutation(seed: u64) -> Vec<i32> {
         p.push(permutation[i % 256]);
     }
     return p;
+}
+
+fn create_mesh() -> Mesh {
+    Mesh::new(PrimitiveTopology::LineList)
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_POSITION,
+            vec![
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 5.0],
+                [0.0, 0.0, 5.0],
+                [5.0, 0.0, 5.0],
+                [5.0, 0.0, 5.0],
+                [5.0, 0.0, 0.0],
+                [5.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+        )
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_UV_0,
+            vec![
+                [0.0, 1.0],
+                [0.0, 1.0],
+                [0.0, 1.0],
+                [0.0, 1.0],
+                [0.0, 1.0],
+                [0.0, 1.0],
+                [0.0, 1.0],
+                [0.0, 1.0],
+            ],
+        )
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_NORMAL,
+            vec![
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+            ],
+        )
 }
 
 fn main() {
@@ -111,49 +179,120 @@ fn main() {
     let mut noise_map = vec![vec![0.0; height]; width];
     for i in 0..width {
         for j in 0..height {
-            let mut value = 0.0;
-            for o in 0..octaves {
-                let frequency = 2.0f64.powi(o);
-                let amplitude = persistence.powi(o);
-                value += perlin(
-                    i as f64 * scale * frequency,
-                    j as f64 * scale * frequency,
-                    0.0,
-                    &permutation,
-                ) * amplitude;
-            }
-            noise_map[i][j] = value;
+            // let mut value = 0.0;
+            // for o in 0..octaves {
+            //     let frequency = 2.0f64.powi(o);
+            //     let amplitude = persistence.powi(o);
+            //     value += perlin(
+            //         i as f64 * scale * frequency,
+            //         // j as f64 * scale * frequency,
+            //         0.0,
+            //         0.0,
+            //         &permutation,
+            //     ) * amplitude;
+            // }
+            noise_map[i][j] = octave_perlin(
+                i as f64 + rng.gen::<f64>(),
+                j as f64 + rng.gen::<f64>(),
+                0.0,
+                octaves,
+                persistence,
+                scale,
+                &permutation,
+            );
         }
     }
 
-    let root = BitMapBackend::new("vector_plot.png", (600, 400)).into_drawing_area();
-    root.fill(&WHITE).unwrap();
+    let heightmap: Vec<Vec<f64>> = noise_map;
 
-    // Create a chart context
-    let mut chart = ChartBuilder::on(&root)
-        .caption("2D Vector Plot", ("Arial", 20))
-        .x_label_area_size(30)
-        .y_label_area_size(30)
-        .build_ranged(
-            data.iter().map(|point| point[0]).min()..data.iter().map(|point| point[0]).max(),
-            data.iter().map(|point| point[1]).min()..data.iter().map(|point| point[1]).max(),
-        )
-        .unwrap();
+    // Set the dimensions of your image
+    let width = heightmap[0].len();
+    let height = heightmap.len();
 
-    // Draw points for each data pair in the vector
-    chart
-        .draw_series(PointSeries::of_element(
-            data.iter().map(|point| (point[0], point[1])),
-            5,
-            &RED,
-            &|c, s, st| {
-                return EmptyElement::at(c)
-                    + Circle::new((0, 0), s, st.filled())
-                    + Text::new(format!("{:?}", c), (10, 0), ("Arial", 10));
-            },
-        ))
-        .unwrap();
+    // Create a new dynamic image
+    let mut img = DynamicImage::new_rgb8(width as u32, height as u32);
 
-    // Save the plot to a file
-    root.present().unwrap();
+    // Convert the heightmap to image pixels
+    for y in 0..height {
+        for x in 0..width {
+            let height_value = heightmap[y][x];
+
+            // Map the height value to a grayscale color
+            let color_value = (height_value * 255.0) as u8;
+
+            // Create an Rgba pixel with grayscale color
+            let pixel = Rgba([color_value, color_value, color_value, 255]);
+
+            // Put the pixel in the image at the specified position
+            img.put_pixel(x as u32, y as u32, pixel);
+        }
+    }
+
+    // Save the image to a file
+    img.save("output.png").expect("Failed to save image");
+
+    // App::new()
+    //     .add_plugins(DefaultPlugins)
+    //     .add_systems(Startup, setup)
+    //     .add_systems(Update, draw_cursor)
+    //     .run();
+}
+
+fn draw_cursor(
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    ground_query: Query<&GlobalTransform, With<Ground>>,
+    windows: Query<&Window>,
+    mut gizmos: Gizmos,
+) {
+    let (camera, camera_transform) = camera_query.single();
+    let ground = ground_query.single();
+
+    let Some(cursor_position) = windows.single().cursor_position() else {
+        return;
+    };
+
+    // Calculate a ray pointing from the camera into the world based on the cursor's position.
+    let Some(ray) = camera.viewport_to_world(camera_transform, cursor_position) else {
+        return;
+    };
+
+    // Calculate if and where the ray is hitting the ground plane.
+    let Some(distance) = ray.intersect_plane(ground.translation(), ground.up()) else {
+        return;
+    };
+    let point = ray.get_point(distance);
+
+    // Draw a circle just above the ground plane at that position.
+    gizmos.circle(point + ground.up() * 0.01, ground.up(), 0.2, Color::WHITE);
+}
+
+#[derive(Component)]
+struct Ground;
+
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // plane
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(create_mesh()),
+            material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+            ..default()
+        },
+        Ground,
+    ));
+
+    // light
+    commands.spawn(DirectionalLightBundle {
+        transform: Transform::from_translation(Vec3::ONE).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
+
+    // camera
+    commands.spawn(Camera3dBundle {
+        transform: Transform::from_xyz(15.0, 5.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
 }
