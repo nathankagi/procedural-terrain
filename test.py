@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import csv
 
 def perlin(x, y, seed=0):
     np.random.seed(seed)
@@ -34,13 +35,18 @@ def gradient(h, x, y):
     g = vectors[h % 4]
     return g[:, :, 0] * x + g[:, :, 1] * y
 
-r = 1000
+r = 10
 p = np.zeros((r,r))
 for i in range(4):
     freq = 2**i
     lin = np.linspace(0, freq, r, endpoint=False)
     x, y = np.meshgrid(lin, lin)
     p = perlin(x, y, seed=random.randint(0, 1000)) / freq + p
+
+csv_file_path = 'output.csv'
+with open(csv_file_path, 'w', newline='') as csv_file:
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerows(p)
 
 plt.imshow(p, origin='upper')
 plt.show()

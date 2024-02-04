@@ -1,19 +1,20 @@
+use std::error::Error;
+
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
-use image::{DynamicImage, GenericImage, Rgba};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 
 fn fade(t: f64) -> f64 {
-    return (6.0 * t.powi(5) - 15.0 * t.powi(4) + 1.0 * t.powi(3)).into();
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
-fn lerp(t: f64, a: f64, b: f64) -> f64 {
+fn lerp(a: f64, b: f64, t: f64) -> f64 {
     (a + t * (b - a)).into()
 }
 
-fn grad(hash: i32, x: f64, y: f64, z: f64) -> f64 {
+fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
     let input = hash & 0xF;
     match input {
         0x0 => return x + y,
@@ -36,10 +37,17 @@ fn grad(hash: i32, x: f64, y: f64, z: f64) -> f64 {
     }
 }
 
-fn perlin(x: f64, y: f64, z: f64, p: &Vec<i32>) -> f64 {
-    let _x = (x.floor() as usize % p.len()) & 255;
-    let _y = (y.floor() as usize % p.len()) & 255;
-    let _z = (z.floor() as usize % p.len()) & 255;
+fn grad2d(hash: i32, x: f64, y: f64) -> f64 {
+    let vec = vec![[0, 1], [0, -1], [1, 0], [-1, 0]];
+    let index = hash % 4;
+    let g = vec[index as usize];
+    return (g[0] as f64 * x) + (g[1] as f64 * y);
+}
+
+fn perlin3d(x: f64, y: f64, z: f64, p: &Vec<i32>) -> f64 {
+    let _x = (x.floor() as usize) & 255;
+    let _y = (y.floor() as usize) & 255;
+    let _z = (z.floor() as usize) & 255;
 
     let xf: f64 = x - _x as f64;
     let yf: f64 = x - _y as f64;
@@ -58,58 +66,89 @@ fn perlin(x: f64, y: f64, z: f64, p: &Vec<i32>) -> f64 {
     let bab = p[p[p[_x + 1] as usize + _y] as usize + _z + 1];
     let bbb = p[p[p[_x + 1] as usize + _y + 1] as usize + _z + 1];
 
-    let x1 = lerp(
-        grad(aaa, xf, yf, zf) as f64,
-        grad(baa, xf - 1.0, yf, zf) as f64,
+    let x01 = lerp(
+        grad3d(aaa, xf, yf, zf) as f64,
+        grad3d(baa, xf - 1.0, yf, zf) as f64,
         u,
     );
-    let x2 = lerp(
-        grad(aba, xf, yf - 1.0, zf) as f64,
-        grad(bba, xf - 1.0, yf - 1.0, zf) as f64,
+    let x02 = lerp(
+        grad3d(aba, xf, yf - 1.0, zf) as f64,
+        grad3d(bba, xf - 1.0, yf - 1.0, zf) as f64,
         u,
     );
-    let y1 = lerp(x1, x2, v);
+    let y1 = lerp(x01, x02, v);
 
-    let x1 = lerp(
-        grad(aab, xf, yf, zf - 1.0) as f64,
-        grad(bab, xf - 1.0, yf, zf - 1.0) as f64,
+    let x11 = lerp(
+        grad3d(aab, xf, yf, zf - 1.0) as f64,
+        grad3d(bab, xf - 1.0, yf, zf - 1.0) as f64,
         u,
     );
-    let x2 = lerp(
-        grad(abb, xf, yf - 1.0, zf - 1.0) as f64,
-        grad(bbb, xf - 1.0, yf - 1.0, zf - 1.0) as f64,
+    let x12 = lerp(
+        grad3d(abb, xf, yf - 1.0, zf - 1.0) as f64,
+        grad3d(bbb, xf - 1.0, yf - 1.0, zf - 1.0) as f64,
         u,
     );
-    let y2 = lerp(x1, x2, v);
+    let y2 = lerp(x11, x12, v);
 
     return (lerp(y1, y2, w) + 1.0) / 2.0;
 }
 
-fn octave_perlin(
+fn perlin2d(x: f64, y: f64, p: &Vec<i32>) -> f64 {
+    let _x = x.floor() as usize & 255;
+    let _y = y.floor() as usize & 255;
+
+    let xf = x - _x as f64;
+    let yf = y - _y as f64;
+
+    let u = fade(xf);
+    let v = fade(yf);
+
+    let aa = grad2d(p[p[_x] as usize + _y], xf, yf);
+    let ab = grad2d(p[p[_x] as usize + _y + 1], xf, yf - 1.0);
+    let bb = grad2d(p[p[_x + 1] as usize + _y + 1], xf - 1.0, yf - 1.0);
+    let ba = grad2d(p[p[_x + 1] as usize + _y], xf - 1.0, yf);
+
+    let x1 = lerp(aa, ba, u);
+    let x2 = lerp(ab, bb, u);
+    return lerp(x1, x2, v);
+}
+
+fn octave_perlin3d(
     x: f64,
     y: f64,
     z: f64,
     octaves: i32,
     persistence: f64,
-    scale: f64,
     permutation: &Vec<i32>,
 ) -> f64 {
     let mut value = 0.0;
+    let mut max_value = 1.0;
     for o in 0..octaves {
-        let frequency = 2.0f64.powi(o);
+        let f = 2.0f64.powi(o);
         let amplitude = persistence.powi(o);
-        value += perlin(
-            x * scale * frequency,
-            y * scale * frequency,
-            z * scale * frequency,
-            &permutation,
-        ) * amplitude;
+
+        max_value += amplitude;
+        value += perlin3d(x * f, y * f, z * f, permutation) * amplitude;
     }
-    return value;
+    return value / max_value;
 }
 
-fn generate_permutation(seed: u64) -> Vec<i32> {
-    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
+fn octave_perlin2d(x: f64, y: f64, octaves: i32, persistence: f64, permutation: &Vec<i32>) -> f64 {
+    let mut value = 0.0;
+    let mut max_value = 1.0;
+
+    for o in 0..octaves {
+        let f = 2.0f64.powi(o);
+        let amplitude = persistence.powi(o);
+
+        max_value += amplitude;
+        value += perlin2d(x * f, y * f, permutation) * amplitude;
+    }
+    return value / max_value;
+}
+
+fn generate_permutation(seed: u32) -> Vec<i32> {
+    let mut rng: StdRng = SeedableRng::seed_from_u64(seed.into());
     let mut permutation: Vec<i32> = (0..256).collect();
     permutation.shuffle(&mut rng);
 
@@ -163,79 +202,55 @@ fn create_mesh() -> Mesh {
         )
 }
 
-fn main() {
-    let width = 512;
-    let height = 512;
+fn save_output(arr: Vec<Vec<f64>>) -> Result<(), Box<dyn Error>> {
+    let file_path = "output.csv";
 
-    let scale = 0.1;
-    let octaves = 6;
-    let persistence: f64 = 0.5;
+    // Create a CSV writer
+    let mut writer = csv::Writer::from_path(file_path)?;
+
+    // Iterate over each row in the data and write it to the CSV file
+    for row in arr {
+        writer.write_record(row.iter().map(|&f| f.to_string()))?;
+    }
+
+    writer.flush()?;
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let width = 1000;
+    let height = 1000;
+
+    let octaves = 4;
+    let persistence: f64 = 0.4;
 
     let mut rng = rand::thread_rng();
-    let seed = rng.gen::<u64>();
-
+    let seed = rng.gen::<u32>();
     let permutation = generate_permutation(seed);
 
-    let mut noise_map = vec![vec![0.0; height]; width];
-    for i in 0..width {
-        for j in 0..height {
-            // let mut value = 0.0;
-            // for o in 0..octaves {
-            //     let frequency = 2.0f64.powi(o);
-            //     let amplitude = persistence.powi(o);
-            //     value += perlin(
-            //         i as f64 * scale * frequency,
-            //         // j as f64 * scale * frequency,
-            //         0.0,
-            //         0.0,
-            //         &permutation,
-            //     ) * amplitude;
-            // }
-            noise_map[i][j] = octave_perlin(
-                i as f64 + rng.gen::<f64>(),
-                j as f64 + rng.gen::<f64>(),
-                0.0,
+    let mut noise_map = vec![vec![0.0; width]; height];
+    for i in 0..height {
+        for j in 0..width {
+            noise_map[i][j] = octave_perlin2d(
+                i as f64 / height as f64,
+                j as f64 / width as f64,
                 octaves,
                 persistence,
-                scale,
                 &permutation,
-            );
+            ) as f64;
         }
     }
 
-    let heightmap: Vec<Vec<f64>> = noise_map;
-
-    // Set the dimensions of your image
-    let width = heightmap[0].len();
-    let height = heightmap.len();
-
-    // Create a new dynamic image
-    let mut img = DynamicImage::new_rgb8(width as u32, height as u32);
-
-    // Convert the heightmap to image pixels
-    for y in 0..height {
-        for x in 0..width {
-            let height_value = heightmap[y][x];
-
-            // Map the height value to a grayscale color
-            let color_value = (height_value * 255.0) as u8;
-
-            // Create an Rgba pixel with grayscale color
-            let pixel = Rgba([color_value, color_value, color_value, 255]);
-
-            // Put the pixel in the image at the specified position
-            img.put_pixel(x as u32, y as u32, pixel);
-        }
-    }
-
-    // Save the image to a file
-    img.save("output.png").expect("Failed to save image");
+    save_output(noise_map)?;
 
     // App::new()
     //     .add_plugins(DefaultPlugins)
     //     .add_systems(Startup, setup)
     //     .add_systems(Update, draw_cursor)
     //     .run();
+
+    Ok(())
 }
 
 fn draw_cursor(
