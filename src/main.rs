@@ -1,10 +1,9 @@
-use std::error::Error;
-
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
+use std::error::Error;
 
 fn fade(t: f64) -> f64 {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
@@ -14,6 +13,7 @@ fn lerp(a: f64, b: f64, t: f64) -> f64 {
     (a + t * (b - a)).into()
 }
 
+// simplified algorithm for perlin noise gradient vector
 fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
     let input = hash & 0xF;
     match input {
@@ -37,6 +37,7 @@ fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
     }
 }
 
+// original algorithm for perlin noise gradient vector
 // pub fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
 //     let h = hash & 15;
 //     let u = if h < 8 { x } else { y };
@@ -213,6 +214,26 @@ fn generate_permutation(seed: u32) -> Vec<i32> {
     return p;
 }
 
+fn height_map_to_mesh(map: Vec<Vec<f64>>) -> Mesh {
+    println!("Converting height map to mesh");
+    let mut positions: Vec<[f32; 3]> = vec![];
+
+    for i in 0..map.len() {
+        for j in 0..(map[0].len()) {
+            // positions.push([i as f64, j as f64, map[i][j]]);
+            positions.push([i as f32, map[i][j] as f32, j as f32]);
+        }
+    }
+
+    Mesh::new(PrimitiveTopology::PointList)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions.clone())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0, 1.0]; positions.len()])
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_NORMAL,
+            vec![[0.0, 0.0, 1.0]; positions.len()],
+        )
+}
+
 fn create_mesh() -> Mesh {
     Mesh::new(PrimitiveTopology::LineList)
         .with_inserted_attribute(
@@ -272,12 +293,13 @@ fn save_output(arr: Vec<Vec<f64>>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let width = 1000;
-    let height = 1000;
+fn create_height_map() -> Vec<Vec<f64>> {
+    let width = 100;
+    let height = 100;
+    let scale = 100.0;
 
-    let octaves = 4;
-    let persistence: f64 = 0.4;
+    let octaves = 5;
+    let persistence: f64 = 0.5;
 
     let mut rng = rand::thread_rng();
     let seed = rng.gen::<u32>();
@@ -289,21 +311,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             noise_map[i][j] = octave_perlin3d(
                 i as f64 / height as f64,
                 j as f64 / width as f64,
-                0.00001,
+                0.0,
                 octaves,
                 persistence,
                 &permutation,
-            ) as f64;
+            ) as f64
+                * scale;
         }
     }
 
+    return noise_map;
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let noise_map = create_height_map();
     save_output(noise_map)?;
 
-    // App::new()
-    //     .add_plugins(DefaultPlugins)
-    //     .add_systems(Startup, setup)
-    //     .add_systems(Update, draw_cursor)
-    //     .run();
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_systems(Startup, setup)
+        .add_systems(Update, draw_cursor)
+        .run();
 
     Ok(())
 }
@@ -344,10 +372,10 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // plane
+    // noise mesh
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(create_mesh()),
+            mesh: meshes.add(height_map_to_mesh(create_height_map())),
             material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
             ..default()
         },
@@ -362,7 +390,7 @@ fn setup(
 
     // camera
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(15.0, 5.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
+        transform: Transform::from_xyz(250.0, 100.0, 250.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
 }
