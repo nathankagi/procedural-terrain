@@ -1,10 +1,18 @@
-use bevy::render::{mesh::Mesh, render_resource::PrimitiveTopology};
-use rand::Rng;
-
 use crate::noise;
+use bevy::{
+    render::{mesh::Mesh, render_resource::PrimitiveTopology},
+    scene::serde::SceneMapSerializer,
+    ui::widget,
+};
+use rand::Rng;
+use std::{error::Error, usize};
 
 pub trait Meshable {
     fn triangle_mesh(&self) -> Mesh;
+}
+
+pub trait CSV {
+    fn save(&self) -> Result<(), Box<dyn Error>>;
 }
 pub struct HeightMap {
     pub map: Vec<Vec<f64>>,
@@ -41,8 +49,33 @@ pub fn create_height_map() -> Vec<Vec<f64>> {
 }
 
 impl HeightMap {
-    pub fn new(map: Vec<Vec<f64>>) -> HeightMap {
-        return HeightMap { map };
+    pub fn new(
+        width: usize,
+        height: usize,
+        scale: f64,
+        octaves: i32,
+        persistence: f64,
+    ) -> HeightMap {
+        let mut rng = rand::thread_rng();
+        let seed = rng.gen::<u32>();
+        let permutation = noise::generate_permutation(seed);
+
+        let mut noise_map = vec![vec![0.0; width]; height];
+        for i in 0..height {
+            for j in 0..width {
+                noise_map[i][j] = noise::octave_perlin3d(
+                    i as f64 / height as f64,
+                    j as f64 / width as f64,
+                    0.0,
+                    octaves,
+                    persistence,
+                    &permutation,
+                ) as f64
+                    * scale;
+            }
+        }
+
+        return HeightMap { map: noise_map };
     }
 
     pub fn vertices(&self) -> usize {
@@ -108,5 +141,21 @@ impl Meshable for HeightMap {
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
 
         return mesh;
+    }
+}
+
+impl CSV for HeightMap {
+    fn save(&self) -> Result<(), Box<dyn Error>> {
+        let file_path = "output.csv";
+
+        let mut writer = csv::Writer::from_path(file_path)?;
+
+        for row in &self.map {
+            writer.write_record(row.iter().map(|&f| f.to_string()))?;
+        }
+
+        writer.flush()?;
+
+        Ok(())
     }
 }
