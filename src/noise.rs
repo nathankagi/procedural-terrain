@@ -1,6 +1,6 @@
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 
 fn fade(t: f64) -> f64 {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);

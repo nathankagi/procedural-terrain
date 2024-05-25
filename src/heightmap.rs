@@ -1,9 +1,10 @@
 use crate::noise;
-use bevy::{
-    render::{mesh::Mesh, render_resource::PrimitiveTopology},
-    scene::serde::SceneMapSerializer,
-    ui::widget,
+use bevy::render::{
+    mesh::{Indices, Mesh},
+    render_asset::RenderAssetUsages,
+    render_resource::PrimitiveTopology,
 };
+use nalgebra::Vector3;
 use rand::Rng;
 use std::{error::Error, usize};
 
@@ -14,6 +15,11 @@ pub trait Meshable {
 pub trait CSV {
     fn save(&self) -> Result<(), Box<dyn Error>>;
 }
+
+pub trait PNG {
+    fn save(&self) -> Result<(), Box<dyn Error>>;
+}
+
 pub struct HeightMap {
     pub map: Vec<Vec<f64>>,
 }
@@ -93,54 +99,30 @@ impl HeightMap {
 impl Meshable for HeightMap {
     // triangle list mesh
     fn triangle_mesh(&self) -> Mesh {
-        let depth = self.length();
+        let height = self.length();
         let width = self.width();
 
-        let triangle_count: usize = width * depth * 2 * 3;
-        let vertex_count: usize = width * depth;
+        let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(width * height);
 
-        let mut positions: Vec<[f32; 3]> = Vec::with_capacity(vertex_count);
-        let mut normals: Vec<[f32; 3]> = Vec::with_capacity(vertex_count);
-        let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(vertex_count);
-        let mut triangles: Vec<u32> = Vec::with_capacity(triangle_count);
+        let normals = calculate_normals(&self.map);
+        let indices = generate_indices(width, height);
+        let vertices = generate_vertices(&self.map);
 
         // for (i, row) in map.iter().enumerate() {}
-
-        for d in 0..depth {
-            for w in 0..width {
-                // Push vertex positions, normals, and UVs
-                positions.push([w as f32, self.map[w][d] as f32, d as f32]);
-                normals.push([0.0, 1.0, 0.0]);
-                uvs.push([w as f32 / width as f32, d as f32 / depth as f32]);
-
-                // Define triangle indices
-                if d < depth - 1 && w < width - 1 {
-                    let index = (d * width + w) as u32;
-                    let next_row_index = ((d + 1) * width + w) as u32;
-                    let next_column_index = (d * width + w + 1) as u32;
-                    let next_row_column_index = ((d + 1) * width + w + 1) as u32;
-
-                    // First triangle
-                    triangles.push(index);
-                    triangles.push(next_row_index);
-                    triangles.push(next_row_column_index);
-
-                    // Second triangle
-                    triangles.push(index);
-                    triangles.push(next_row_column_index);
-                    triangles.push(next_column_index);
-                }
+        for y in 0..width {
+            for x in 0..height {
+                uvs.push([x as f32 / width as f32, y as f32 / height as f32]);
             }
         }
 
-        // let mut mesh = Mesh::new(PrimitiveTopology::PointList);
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-        mesh.set_indices(Some(bevy::render::mesh::Indices::U32(triangles)));
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-
-        return mesh;
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_indices(Indices::U32(indices))
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
     }
 }
 
@@ -158,4 +140,80 @@ impl CSV for HeightMap {
 
         Ok(())
     }
+}
+
+fn calculate_normals(height_map: &Vec<Vec<f64>>) -> Vec<[f32; 3]> {
+    let width = height_map.len();
+    let height = height_map[0].len();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
+
+    for y in 0..width {
+        for x in 0..height {
+            let height_l = if x > 0 {
+                height_map[x - 1][y]
+            } else {
+                height_map[x][y]
+            };
+
+            let height_r = if x < width - 1 {
+                height_map[x + 1][y]
+            } else {
+                height_map[x][y]
+            };
+
+            let height_d = if y > 0 {
+                height_map[x][y - 1]
+            } else {
+                height_map[x][y]
+            };
+
+            let height_u = if y < height - 1 {
+                height_map[x][y + 1]
+            } else {
+                height_map[x][y]
+            };
+
+            let normal = Vector3::new(height_l - height_r, 2.0, height_d - height_u).normalize();
+            normals.push([normal.x as f32, normal.y as f32, normal.z as f32]);
+        }
+    }
+
+    normals
+}
+
+fn generate_indices(width: usize, height: usize) -> Vec<u32> {
+    let mut indices: Vec<u32> = Vec::new();
+
+    for y in 0..width - 1 {
+        for x in 0..height - 1 {
+            let top_left = (x + y * width) as u32;
+            let top_right = ((x + 1) + y * width) as u32;
+            let bottom_left = (x + (y + 1) * width) as u32;
+            let bottom_right = ((x + 1) + (y + 1) * width) as u32;
+
+            indices.push(top_left);
+            indices.push(bottom_left);
+            indices.push(top_right);
+
+            indices.push(top_right);
+            indices.push(bottom_left);
+            indices.push(bottom_right);
+        }
+    }
+
+    indices
+}
+
+fn generate_vertices(height_map: &Vec<Vec<f64>>) -> Vec<[f32; 3]> {
+    let width = height_map.len();
+    let height = height_map[0].len();
+    let mut vertices: Vec<[f32; 3]> = Vec::new();
+
+    for y in 0..width {
+        for x in 0..height {
+            vertices.push([x as f32, height_map[x][y] as f32, y as f32]);
+        }
+    }
+
+    vertices
 }
