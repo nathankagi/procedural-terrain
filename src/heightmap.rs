@@ -103,15 +103,67 @@ impl Meshable for HeightMap {
         let width = self.width();
 
         let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(width * height);
+        let mut normals: Vec<[f32; 3]> = Vec::with_capacity(width * height);
+        let mut indices: Vec<u32> = Vec::new();
+        let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(width * height);
 
-        let normals = calculate_normals(&self.map);
-        let indices = generate_indices(width, height);
-        let vertices = generate_vertices(&self.map);
+        // let normals = calculate_normals(&self.map);
+        // let indices = generate_indices(width, height);
+        // let vertices = generate_vertices(&self.map);
 
         // for (i, row) in map.iter().enumerate() {}
         for y in 0..width {
             for x in 0..height {
+                // UVs
                 uvs.push([x as f32 / width as f32, y as f32 / height as f32]);
+
+                // Normals
+                let height_l = if x > 0 {
+                    self.map[x - 1][y]
+                } else {
+                    self.map[x][y]
+                };
+
+                let height_r = if x < width - 1 {
+                    self.map[x + 1][y]
+                } else {
+                    self.map[x][y]
+                };
+
+                let height_d = if y > 0 {
+                    self.map[x][y - 1]
+                } else {
+                    self.map[x][y]
+                };
+
+                let height_u = if y < height - 1 {
+                    self.map[x][y + 1]
+                } else {
+                    self.map[x][y]
+                };
+
+                let normal =
+                    Vector3::new(height_l - height_r, 2.0, height_d - height_u).normalize();
+                normals.push([normal.x as f32, normal.y as f32, normal.z as f32]);
+
+                // Indices
+                if x < (height - 1) && y < (width - 1) {
+                    let top_left = (x + y * width) as u32;
+                    let top_right = ((x + 1) + y * width) as u32;
+                    let bottom_left = (x + (y + 1) * width) as u32;
+                    let bottom_right = ((x + 1) + (y + 1) * width) as u32;
+
+                    indices.push(top_left);
+                    indices.push(bottom_left);
+                    indices.push(top_right);
+
+                    indices.push(top_right);
+                    indices.push(bottom_left);
+                    indices.push(bottom_right);
+                }
+
+                // Vertices
+                vertices.push([x as f32, self.map[x][y] as f32, y as f32]);
             }
         }
 

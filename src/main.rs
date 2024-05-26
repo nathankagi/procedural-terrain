@@ -29,7 +29,7 @@ fn setup(
         ..Default::default()
     });
 
-    let mesh = HeightMap::new(size, size, size as f64, 6, 0.5);
+    let mesh = HeightMap::new(size, size, size as f64, 8, 0.5);
 
     commands.spawn(PbrBundle {
         mesh: meshes.add(mesh.triangle_mesh()),
@@ -50,13 +50,13 @@ fn setup_ambient_light(mut ambient_light: ResMut<AmbientLight>) {
 fn setup_lights(mut commands: Commands) {
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 20_00_000_000.0,
+            intensity: 30_000_000_000.0,
             range: 10_000.0,
-            radius: 0.0,
+            radius: 10_000.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_translation(Vec3::new(200.0, 200.0, 200.0))
+        transform: Transform::from_translation(Vec3::new(500.0, 500.0, 0.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         ..default()
     });

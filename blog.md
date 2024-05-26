@@ -26,4 +26,43 @@ I had to do a bit of shuffling around, resolving the typical incorrect sign issu
 
 I found it somewhat hard to find solid information on meshing. Some of the new Bevy documentation does a reasonable job, seen in [custom meshing](https://bevyengine.org/examples/3D%20Rendering/generate-custom-mesh/). Initially I used verticle only normals, trying to get the lighting (both ambient and directional) working with this setup led to some interesting looking shadow behaviour.
 
-To get rid of these stange shadows I changed the normal vector calculation to an answer from [stack overflow](https://stackoverflow.com/questions/6656358/calculating-normals-in-a-triangle-mesh). The calculation simplifies to calculating the height differences between the adjacent row and column points. Tuning the weighing value of 2.0 can allow for more, or less, contribution from the height variation. With this adjustment the lighting looks quite nice.
+To get rid of these stange shadows I changed the normal vector calculation to an answer from [stack overflow](https://stackoverflow.com/questions/6656358/calculating-normals-in-a-triangle-mesh). The calculation simplifies to calculating the height differences between the adjacent row and column points. Tuning the weighing value of 2.0 can allow for more, or less, contribution from the height variation. With some tweaking of the noise generation, some ambient and directional light I was able to get a nice wavy terrain using the following config:
+
+```rust
+HeightMap::new(1000, 1000, 1000.0, 8, 0.5);
+```
+
+and light config:
+
+```rust
+fn setup_ambient_light(mut ambient_light: ResMut<AmbientLight>) {
+    ambient_light.brightness = 100.0;
+}
+
+fn setup_lights(mut commands: Commands) {
+    commands.spawn(PointLightBundle {
+        point_light: PointLight {
+            intensity: 20_00_000_000.0,
+            range: 10_000.0,
+            radius: 10_000.0,
+            shadows_enabled: true,
+            ..default()
+        },
+        transform: Transform::from_translation(Vec3::new(500.0, 500.0, 0.0))
+            .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+        ..default()
+    });
+}
+```
+
+![triangle_mesh](./resources/triangle_mesh.png "Triangle List Mesh")
+
+There are still some issues with the lighting which become apparent on both very smooth and very hilly terrain. The smooth surfaces become very shiny and the sharper terrain becomes dull. This is due to the y scale factor in the normal vector calculation.
+
+```rust
+let normal = Vector3::new(height_diff_x, 2.0, height_diff_z).normalize();
+```
+
+Typically a value of 2 is suitable but in these extremes would need to be altered. Larger values are suited to flatter terrain keeping the normal vectors more vertical while smaller values are more suitable to more hilly terrain. This can be dynamically adjusted but isn't super necessary for this kind of simulation so I'll leave the value at 2 for now. It is also worth noting this seems more noticeable in the dimly lit scene I currently have.
+
+![triangle mesh light](./resources/triangle_mesh_light.png "Triangle List Mesh Lighter")
