@@ -4,12 +4,13 @@ use bevy::render::{
     render_asset::RenderAssetUsages,
     render_resource::PrimitiveTopology,
 };
-use nalgebra::Vector3;
+use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use std::{error::Error, usize};
 
 pub trait Meshable {
     fn triangle_mesh(&self) -> Mesh;
+    fn remesh(&self);
 }
 
 pub trait CSV {
@@ -22,6 +23,13 @@ pub trait PNG {
 
 pub struct HeightMap {
     pub map: Vec<Vec<f64>>,
+    modified_elements: Vec<(u32, u32)>,
+}
+
+pub struct Vertex {
+    pub position: Vector3<f32>,
+    pub normal: Vector3<f32>,
+    pub uv: Vector2<f32>,
 }
 
 pub fn create_height_map() -> Vec<Vec<f64>> {
@@ -81,35 +89,31 @@ impl HeightMap {
             }
         }
 
-        return HeightMap { map: noise_map };
+        return HeightMap {
+            map: noise_map,
+            modified_elements: Vec::new(),
+        };
     }
 
-    pub fn vertices(&self) -> usize {
-        return (self.length() + 1) * (self.width() + 1);
-    }
-
-    pub fn length(&self) -> usize {
+    pub fn width(&self) -> usize {
         return self.map.len();
     }
-    pub fn width(&self) -> usize {
+    pub fn height(&self) -> usize {
         return self.map[0].len();
     }
+
+    pub fn erode(&self) {}
 }
 
 impl Meshable for HeightMap {
-    // triangle list mesh
     fn triangle_mesh(&self) -> Mesh {
-        let height = self.length();
+        let height = self.height();
         let width = self.width();
 
         let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(width * height);
         let mut normals: Vec<[f32; 3]> = Vec::with_capacity(width * height);
         let mut indices: Vec<u32> = Vec::new();
         let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(width * height);
-
-        // let normals = calculate_normals(&self.map);
-        // let indices = generate_indices(width, height);
-        // let vertices = generate_vertices(&self.map);
 
         // for (i, row) in map.iter().enumerate() {}
         for y in 0..width {
@@ -167,6 +171,21 @@ impl Meshable for HeightMap {
             }
         }
 
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_indices(Indices::U32(indices))
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    }
+
+    fn remesh(&self) -> Mesh {
+        // update vertices, normals, uvs from updated heightmap using only modified elements
+        for (i, point) in self.modified_elements.iter().enumerate() {}
+
+        // rerender small sections of the heightmap
         Mesh::new(
             PrimitiveTopology::TriangleList,
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,

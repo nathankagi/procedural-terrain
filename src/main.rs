@@ -13,13 +13,13 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let size = 1000;
+    let size = 4000;
 
     // Camera
     commands.spawn(Camera3dBundle {
         transform: Transform::from_xyz(
             -(size as f32) / 2.0 as f32,
-            size as f32 / 2.0,
+            size as f32,
             -(size as f32) / 2.0,
         )
         .looking_at(
@@ -29,6 +29,7 @@ fn setup(
         ..Default::default()
     });
 
+    // Terrain Mesh
     let mesh = HeightMap::new(size, size, size as f64, 8, 0.5);
 
     commands.spawn(PbrBundle {
@@ -56,7 +57,7 @@ fn setup_lights(mut commands: Commands) {
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_translation(Vec3::new(500.0, 500.0, 0.0))
+        transform: Transform::from_translation(Vec3::new(500.0, 500.0, 500.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         ..default()
     });
