@@ -13,7 +13,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let size = 4000;
+    let size = 5000;
 
     // Camera
     commands.spawn(Camera3dBundle {

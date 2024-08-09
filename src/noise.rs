@@ -187,7 +187,7 @@ pub fn octave_perlin3d(
     return value / max_value;
 }
 
-fn octave_perlin2d(x: f64, y: f64, octaves: i32, persistence: f64, permutation: &Vec<i32>) -> f64 {
+pub fn octave_perlin2d(x: f64, y: f64, octaves: i32, persistence: f64, permutation: &Vec<i32>) -> f64 {
     let mut value = 0.0;
     let mut max_value = 1.0;
 

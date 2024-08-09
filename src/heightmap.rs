@@ -10,7 +10,6 @@ use std::{error::Error, usize};
 
 pub trait Meshable {
     fn triangle_mesh(&self) -> Mesh;
-    // fn remesh(&self);
 }
 
 pub trait CSV {
@@ -22,8 +21,12 @@ pub trait PNG {
 }
 
 pub struct HeightMap {
-    pub map: Vec<Vec<f64>>,
-    modified_elements: Vec<(u32, u32)>,
+    pub map: Vec<Vec<f64>>
+}
+
+pub struct CustomMesh {
+    pub indices: Vec<u32>,
+    pub vertices: Vec<Vec<Vertex>>,
 }
 
 pub struct Vertex {
@@ -91,7 +94,7 @@ impl HeightMap {
 
         return HeightMap {
             map: noise_map,
-            modified_elements: Vec::new(),
+            // modified_elements: Vec::new(),
         };
     }
 
