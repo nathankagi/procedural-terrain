@@ -45,7 +45,7 @@ fn setup(
 }
 
 fn setup_ambient_light(mut ambient_light: ResMut<AmbientLight>) {
-    ambient_light.brightness = 100.0;
+    ambient_light.brightness = 200.0;
 }
 
 fn setup_lights(mut commands: Commands) {
@@ -57,7 +57,7 @@ fn setup_lights(mut commands: Commands) {
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_translation(Vec3::new(500.0, 500.0, 500.0))
+        transform: Transform::from_translation(Vec3::new(500.0, 1000.0, 500.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         ..default()
     });

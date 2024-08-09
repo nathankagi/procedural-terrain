@@ -10,7 +10,7 @@ use std::{error::Error, usize};
 
 pub trait Meshable {
     fn triangle_mesh(&self) -> Mesh;
-    fn remesh(&self);
+    // fn remesh(&self);
 }
 
 pub trait CSV {
@@ -181,20 +181,20 @@ impl Meshable for HeightMap {
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
     }
 
-    fn remesh(&self) -> Mesh {
-        // update vertices, normals, uvs from updated heightmap using only modified elements
-        for (i, point) in self.modified_elements.iter().enumerate() {}
+    // fn remesh(&self) -> Mesh {
+    //     // update vertices, normals, uvs from updated heightmap using only modified elements
+    //     for (i, point) in self.modified_elements.iter().enumerate() {}
 
-        // rerender small sections of the heightmap
-        Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-        )
-        .with_inserted_indices(Indices::U32(indices))
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-    }
+    //     // rerender small sections of the heightmap
+    //     Mesh::new(
+    //         PrimitiveTopology::TriangleList,
+    //         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    //     )
+    //     .with_inserted_indices(Indices::U32(indices))
+    //     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
+    //     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    //     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    // }
 }
 
 impl CSV for HeightMap {
