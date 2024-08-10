@@ -1,9 +1,4 @@
 use crate::noise;
-use bevy::render::{
-    mesh::{Indices, Mesh},
-    render_asset::RenderAssetUsages,
-    render_resource::PrimitiveTopology,
-};
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use std::{error::Error, usize};
@@ -14,34 +9,33 @@ pub trait Meshable {
 
 pub trait CSV {
     fn save(&self) -> Result<(), Box<dyn Error>>;
+    fn load() -> Result<HeightMap, Box<dyn Error>>;
 }
 
 pub trait PNG {
     fn save(&self) -> Result<(), Box<dyn Error>>;
+    fn load() -> Result<HeightMap, Box<dyn Error>>;
 }
 
 pub struct HeightMap {
-    pub map: Vec<Vec<f64>>
+    pub map: Vec<Vec<f32>>
 }
 
-pub struct CustomMesh {
+pub struct Mesh {
+    pub vertices: Vec<[f32;3]>,
+    pub normals: Vec<[f32;3]>,
+    pub uvs: Vec<[f32;2]>,
     pub indices: Vec<u32>,
-    pub vertices: Vec<Vec<Vertex>>,
+    pub values: Vec<f32>,
 }
 
-pub struct Vertex {
-    pub position: Vector3<f32>,
-    pub normal: Vector3<f32>,
-    pub uv: Vector2<f32>,
-}
-
-pub fn create_height_map() -> Vec<Vec<f64>> {
+pub fn create_height_map() -> Vec<Vec<f32>> {
     let width = 20;
     let height = 20;
     let scale = 200.0;
 
     let octaves = 6;
-    let persistence: f64 = 0.5;
+    let persistence: f32 = 0.5;
 
     let mut rng = rand::thread_rng();
     let seed = rng.gen::<u32>();
@@ -51,13 +45,13 @@ pub fn create_height_map() -> Vec<Vec<f64>> {
     for i in 0..height {
         for j in 0..width {
             noise_map[i][j] = noise::octave_perlin3d(
-                i as f64 / height as f64,
-                j as f64 / width as f64,
+                i as f32 / height as f32,
+                j as f32 / width as f32,
                 0.0,
                 octaves,
                 persistence,
                 &permutation,
-            ) as f64
+            ) as f32
                 * scale;
         }
     }
@@ -66,36 +60,16 @@ pub fn create_height_map() -> Vec<Vec<f64>> {
 }
 
 impl HeightMap {
-    pub fn new(
-        width: usize,
-        height: usize,
-        scale: f64,
-        octaves: i32,
-        persistence: f64,
-    ) -> HeightMap {
-        let mut rng = rand::thread_rng();
-        let seed = rng.gen::<u32>();
-        let permutation = noise::generate_permutation(seed);
-
-        let mut noise_map = vec![vec![0.0; width]; height];
-        for i in 0..height {
-            for j in 0..width {
-                noise_map[i][j] = noise::octave_perlin3d(
-                    i as f64 / height as f64,
-                    j as f64 / width as f64,
-                    0.0,
-                    octaves,
-                    persistence,
-                    &permutation,
-                ) as f64
-                    * scale;
-            }
-        }
-
+    pub fn new(width: usize, height: usize) -> HeightMap {
         return HeightMap {
-            map: noise_map,
-            // modified_elements: Vec::new(),
+            map: vec![vec![0.0; width]; height]
         };
+    }
+
+    pub fn load(values:&[Vec<f32>]) -> HeightMap {
+        HeightMap {
+            map: values.to_vec()
+        }
     }
 
     pub fn width(&self) -> usize {
@@ -104,8 +78,6 @@ impl HeightMap {
     pub fn height(&self) -> usize {
         return self.map[0].len();
     }
-
-    pub fn erode(&self) {}
 }
 
 impl Meshable for HeightMap {
@@ -174,30 +146,14 @@ impl Meshable for HeightMap {
             }
         }
 
-        Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-        )
-        .with_inserted_indices(Indices::U32(indices))
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        Mesh {
+            vertices: vertices,
+            normals: normals,
+            uvs: uvs,
+            indices: indices,
+            values: vec![0.0; width*height],
+        }
     }
-
-    // fn remesh(&self) -> Mesh {
-    //     // update vertices, normals, uvs from updated heightmap using only modified elements
-    //     for (i, point) in self.modified_elements.iter().enumerate() {}
-
-    //     // rerender small sections of the heightmap
-    //     Mesh::new(
-    //         PrimitiveTopology::TriangleList,
-    //         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    //     )
-    //     .with_inserted_indices(Indices::U32(indices))
-    //     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
-    //     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    //     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-    // }
 }
 
 impl CSV for HeightMap {
@@ -214,9 +170,13 @@ impl CSV for HeightMap {
 
         Ok(())
     }
+    
+    fn load() -> Result<HeightMap, Box<dyn Error>> {
+        return Ok(HeightMap::new(0, 0))
+    }
 }
 
-fn calculate_normals(height_map: &Vec<Vec<f64>>) -> Vec<[f32; 3]> {
+fn calculate_normals(height_map: &Vec<Vec<f32>>) -> Vec<[f32; 3]> {
     let width = height_map.len();
     let height = height_map[0].len();
     let mut normals: Vec<[f32; 3]> = Vec::new();
@@ -278,7 +238,7 @@ fn generate_indices(width: usize, height: usize) -> Vec<u32> {
     indices
 }
 
-fn generate_vertices(height_map: &Vec<Vec<f64>>) -> Vec<[f32; 3]> {
+fn generate_vertices(height_map: &Vec<Vec<f32>>) -> Vec<[f32; 3]> {
     let width = height_map.len();
     let height = height_map[0].len();
     let mut vertices: Vec<[f32; 3]> = Vec::new();

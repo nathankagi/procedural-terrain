@@ -2,16 +2,16 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
-fn fade(t: f64) -> f64 {
+fn fade(t: f32) -> f32 {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
-fn lerp(a: f64, b: f64, t: f64) -> f64 {
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
     (a + t * (b - a)).into()
 }
 
 // simplified algorithm for perlin noise gradient vector
-fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
+fn grad3d(hash: i32, x: f32, y: f32, z: f32) -> f32 {
     let input = hash & 0xF;
     match input {
         0x0 => return x + y,
@@ -36,7 +36,7 @@ fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
 
 // original algorithm for perlin noise gradient vector
 /*
-pub fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
+pub fn grad3d(hash: i32, x: f32, y: f32, z: f32) -> f32 {
     let h = hash & 15;
     let u = if h < 8 { x } else { y };
 
@@ -52,21 +52,21 @@ pub fn grad3d(hash: i32, x: f64, y: f64, z: f64) -> f64 {
 }
 */
 
-fn grad2d(hash: i32, x: f64, y: f64) -> f64 {
+fn grad2d(hash: i32, x: f32, y: f32) -> f32 {
     let vec = vec![[0, 1], [0, -1], [1, 0], [-1, 0]];
     let index = hash % 4;
     let g = vec[index as usize];
-    return (g[0] as f64 * x) + (g[1] as f64 * y);
+    return (g[0] as f32 * x) + (g[1] as f32 * y);
 }
 
-fn perlin3d(x: f64, y: f64, z: f64, p: &Vec<i32>) -> f64 {
+fn perlin3d(x: f32, y: f32, z: f32, p: &Vec<i32>) -> f32 {
     let _x = x.floor() as usize & 255;
     let _y = y.floor() as usize & 255;
     let _z = z.floor() as usize & 255;
 
-    let xf: f64 = x - _x as f64;
-    let yf: f64 = y - _y as f64;
-    let zf: f64 = z - _z as f64;
+    let xf: f32 = x - _x as f32;
+    let yf: f32 = y - _y as f32;
+    let zf: f32 = z - _z as f32;
 
     let u = fade(xf);
     let v = fade(yf);
@@ -82,25 +82,25 @@ fn perlin3d(x: f64, y: f64, z: f64, p: &Vec<i32>) -> f64 {
     let bbb = p[p[p[_x + 1] as usize + _y + 1] as usize + _z + 1];
 
     let x01 = lerp(
-        grad3d(aaa, xf, yf, zf) as f64,
-        grad3d(baa, xf - 1.0, yf, zf) as f64,
+        grad3d(aaa, xf, yf, zf) as f32,
+        grad3d(baa, xf - 1.0, yf, zf) as f32,
         u,
     );
     let x02 = lerp(
-        grad3d(aba, xf, yf - 1.0, zf) as f64,
-        grad3d(bba, xf - 1.0, yf - 1.0, zf) as f64,
+        grad3d(aba, xf, yf - 1.0, zf) as f32,
+        grad3d(bba, xf - 1.0, yf - 1.0, zf) as f32,
         u,
     );
     let y1 = lerp(x01, x02, v);
 
     let x11 = lerp(
-        grad3d(aab, xf, yf, zf - 1.0) as f64,
-        grad3d(bab, xf - 1.0, yf, zf - 1.0) as f64,
+        grad3d(aab, xf, yf, zf - 1.0) as f32,
+        grad3d(bab, xf - 1.0, yf, zf - 1.0) as f32,
         u,
     );
     let x12 = lerp(
-        grad3d(abb, xf, yf - 1.0, zf - 1.0) as f64,
-        grad3d(bbb, xf - 1.0, yf - 1.0, zf - 1.0) as f64,
+        grad3d(abb, xf, yf - 1.0, zf - 1.0) as f32,
+        grad3d(bbb, xf - 1.0, yf - 1.0, zf - 1.0) as f32,
         u,
     );
     let y2 = lerp(x11, x12, v);
@@ -146,12 +146,12 @@ fn perlin3d(x: f64, y: f64, z: f64, p: &Vec<i32>) -> f64 {
     // );
 }
 
-fn perlin2d(x: f64, y: f64, p: &Vec<i32>) -> f64 {
+fn perlin2d(x: f32, y: f32, p: &Vec<i32>) -> f32 {
     let _x = x.floor() as usize & 255;
     let _y = y.floor() as usize & 255;
 
-    let xf = x - _x as f64;
-    let yf = y - _y as f64;
+    let xf = x - _x as f32;
+    let yf = y - _y as f32;
 
     let u = fade(xf);
     let v = fade(yf);
@@ -167,18 +167,18 @@ fn perlin2d(x: f64, y: f64, p: &Vec<i32>) -> f64 {
 }
 
 pub fn octave_perlin3d(
-    x: f64,
-    y: f64,
-    z: f64,
+    x: f32,
+    y: f32,
+    z: f32,
     octaves: i32,
-    persistence: f64,
+    persistence: f32,
     permutation: &Vec<i32>,
-) -> f64 {
+) -> f32 {
     let mut value = 0.0;
     let mut max_value = 1.0;
 
     for o in 0..octaves {
-        let f = 2.0f64.powi(o);
+        let f = 2.0f32.powi(o);
         let amplitude = persistence.powi(o);
 
         max_value += amplitude;
@@ -187,12 +187,12 @@ pub fn octave_perlin3d(
     return value / max_value;
 }
 
-pub fn octave_perlin2d(x: f64, y: f64, octaves: i32, persistence: f64, permutation: &Vec<i32>) -> f64 {
+pub fn octave_perlin2d(x: f32, y: f32, octaves: i32, persistence: f32, permutation: &Vec<i32>) -> f32 {
     let mut value = 0.0;
     let mut max_value = 1.0;
 
     for o in 0..octaves {
-        let f = 2.0f64.powi(o);
+        let f = 2.0f32.powi(o);
         let amplitude = persistence.powi(o);
 
         max_value += amplitude;
