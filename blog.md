@@ -45,11 +45,21 @@ scale: 5000.0, maximum amplitude
 octaves: 8, number of octaves of noise
 persistence: 0.5, decay constant of the octave noise
 
+```rust
+let size = 5000;
+let octaves = 8;
+let persistence = 0.5;
+
+let width = size;
+let height = size;
+let scale = size as f32;
+```
+
 and light config:
 
 ```rust
 fn setup_ambient_light(mut ambient_light: ResMut<AmbientLight>) {
-    ambient_light.brightness = 100.0;
+    ambient_light.brightness = 200.0;
 }
 
 fn setup_lights(mut commands: Commands) {
@@ -61,7 +71,7 @@ fn setup_lights(mut commands: Commands) {
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_translation(Vec3::new(500.0, 500.0, 500.0))
+        transform: Transform::from_translation(Vec3::new(500.0, 1000.0, 500.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         ..default()
     });
