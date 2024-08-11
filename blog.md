@@ -10,7 +10,7 @@ I have to acknowledge [Sebastian Lague](https://www.youtube.com/@SebastianLague)
 
 ## First Implementation
 
-I will be using Rust and [bevy](https://bevyengine.org/) for this project. There were several candidates when choosing something render these models. I was considering using a library to use Vulkan or OpenGL directly in either C/C++ or Rust. At least initially, the simplicity of rendering with bevy makes it a good choice to start so I can focus on the actual code rather than spending time getting a triangle on the screen.
+I will be using Rust and [bevy](https://bevyengine.org/), a game engine built in rust, for this project. There were several candidates when choosing something to render these models. I was considering using a library to use Vulkan or OpenGL directly in either C/C++ or Rust. At least initially, the simplicity of rendering with bevy makes it a good choice to start so I can focus on the actual code rather than spending time getting a triangle on the screen.
 
 ### Noise
 
@@ -78,5 +78,83 @@ fn setup_lights(mut commands: Commands) {
 }
 ```
 
-## Improving Terrain
+## Improving Terrain Generation
 
+I started to do some planning for the next stages of the development and what I actually want this project to turn into now that I have an extremely simple example running. The goal for me was to create an environment simulator. The main features being:
+
+- terrain generation including material types such as sand, dirt and stone.
+- cloud generation and movement
+- terrain dynamics via water or wind erosion
+
+To begin though I would like to start by improving some of the terrain generation. The octave perlin noise looks a little unrealistic and overly noisy. Some methods for improving this lie in hydraulic erosion, however there are some techniques to generate slightly more realistic terrain. As a start however, I needed to at least be able to alter the terrain while the application is running. I implimented an update function for the terrain, storing relevant world data on a component struct.
+
+```rust
+#[derive(Component, Debug)]
+struct Terrain {
+    size: usize,
+    octaves: i32,
+    persistence: f32,
+    permutation: Vec<i32>,
+    mesh_handle: Handle<Mesh>,
+}
+```
+
+The initial perlin noise I was generating used a function to generate 3D perlin noise with the z value always set to 0. Changing the call to be implimented in the update function means I could scale the z value by the elapsed time in seconds to visualise changes in the mesh. I encountered a bug that, after some time, caused the terrain to vanish and strange flashes and lines to appear. Printing some values showed that the output of my perlin noise function exploded when one axis inputs to
+
+```rust
+pub fn octave_perlin3d(
+    x: f32,
+    y: f32,
+    z: f32,
+    octaves: i32,
+    persistence: f32,
+    permutation: &Vec<i32>,
+) -> f32
+```
+
+the `octave_perlin3d` function increased above some threshold. The threshold itself, for my initial settings was 2.0. Diving deeper I discovered that this value changed as the octaves changed, due to the adjusted x, y and z values of the perlin3d function being above 255. It came down to using the _x, _y and _z values as shown below.
+
+```rust
+fn perlin3d(x: f32, y: f32, z: f32, p: &Vec<i32>) -> f32 {
+    let _x = x.floor() as usize & 255;
+    let _y = y.floor() as usize & 255;
+    let _z = z.floor() as usize & 255;
+
+    // let xf: f32 = _x - x.floor() as f32; // incorrect
+    // let yf: f32 = _y - y.floor() as f32; // incorrect
+    // let zf: f32 = _z - z.floor() as f32; // incorrect
+
+    let xf: f32 = x - x.floor() as f32;
+    let yf: f32 = y - y.floor() as f32;
+    let zf: f32 = z - z.floor() as f32;
+
+    // ...
+}
+```
+
+Fixing this meant that the perlin noise could be generated correctly. To assist with some performance I added some code to run the noise generation in paralell that I used in another project.
+
+```rust
+heightmap
+    .map
+    .par_iter_mut()
+    .enumerate()
+    .for_each(|(i, row)| {
+        row.iter_mut().enumerate().for_each(|(j, elem)| {
+            *elem = noise::octave_perlin3d(
+                i as f32 / height as f32,
+                j as f32 / width as f32,
+                z,
+                terrain.octaves,
+                terrain.persistence,
+                &terrain.permutation,
+            ) as f32
+                * scale;
+        });
+    });
+```
+
+The result looks a little weird, I find the slower terrain to almost be slightly intoxicating.
+![fast changing terrain](./resources/1000x1000_fast.gif "1000x1000 Fast Rate")
+
+![slow changing terrain](./resources/1000x1000_slow.gif "1000x1000 Slow Rate")

@@ -1,6 +1,7 @@
 use crate::noise;
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
+use rayon::prelude::*;
 use std::{error::Error, usize};
 
 pub trait Meshable {
@@ -18,13 +19,13 @@ pub trait PNG {
 }
 
 pub struct HeightMap {
-    pub map: Vec<Vec<f32>>
+    pub map: Vec<Vec<f32>>,
 }
 
 pub struct Mesh {
-    pub vertices: Vec<[f32;3]>,
-    pub normals: Vec<[f32;3]>,
-    pub uvs: Vec<[f32;2]>,
+    pub vertices: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub uvs: Vec<[f32; 2]>,
     pub indices: Vec<u32>,
     pub values: Vec<f32>,
 }
@@ -62,13 +63,13 @@ pub fn create_height_map() -> Vec<Vec<f32>> {
 impl HeightMap {
     pub fn new(width: usize, height: usize) -> HeightMap {
         return HeightMap {
-            map: vec![vec![0.0; width]; height]
+            map: vec![vec![0.0; width]; height],
         };
     }
 
-    pub fn load(values:&[Vec<f32>]) -> HeightMap {
+    pub fn load(values: &[Vec<f32>]) -> HeightMap {
         HeightMap {
-            map: values.to_vec()
+            map: values.to_vec(),
         }
     }
 
@@ -87,10 +88,9 @@ impl Meshable for HeightMap {
 
         let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(width * height);
         let mut normals: Vec<[f32; 3]> = Vec::with_capacity(width * height);
-        let mut indices: Vec<u32> = Vec::new();
         let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(width * height);
+        let mut indices: Vec<u32> = Vec::new();
 
-        // for (i, row) in map.iter().enumerate() {}
         for y in 0..width {
             for x in 0..height {
                 // UVs
@@ -151,7 +151,7 @@ impl Meshable for HeightMap {
             normals: normals,
             uvs: uvs,
             indices: indices,
-            values: vec![0.0; width*height],
+            values: vec![0.0; width * height],
         }
     }
 }
@@ -170,9 +170,9 @@ impl CSV for HeightMap {
 
         Ok(())
     }
-    
+
     fn load() -> Result<HeightMap, Box<dyn Error>> {
-        return Ok(HeightMap::new(0, 0))
+        return Ok(HeightMap::new(0, 0));
     }
 }
 
