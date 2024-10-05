@@ -4,10 +4,6 @@
 
 I have been looking for some more simulation style projects to attempt. Recently I have been really enjoying some of the virtual environment apps. One I use all the time while working or studying is [Virtual Cottage](https://store.steampowered.com/app/1369320/Virtual_Cottage/). For some time I have been wanting to attempt a terrain simulation project and I thought a terrain simulation would work quite well for something like this.
 
-### Resources
-
-I have to acknowledge [Sebastian Lague](https://www.youtube.com/@SebastianLague) and the videos made on procedural terrain generation that partially inspired me to try sommething like this.
-
 ## First Implementation
 
 I will be using Rust and [bevy](https://bevyengine.org/), a game engine built in rust, for this project. There were several candidates when choosing something to render these models. I was considering using a library to use Vulkan or OpenGL directly in either C/C++ or Rust. At least initially, the simplicity of rendering with bevy makes it a good choice to start so I can focus on the actual code rather than spending time getting a triangle on the screen.
@@ -78,13 +74,17 @@ fn setup_lights(mut commands: Commands) {
 }
 ```
 
-## Improving Terrain Generation
+## Next Steps
 
 I started to do some planning for the next stages of the development and what I actually want this project to turn into now that I have an extremely simple example running. The goal for me was to create an environment simulator. The main features being:
 
-- terrain generation including material types such as sand, dirt and stone.
+- terrain generation including material types such as sand, dirt and stone
 - cloud generation and movement
 - terrain dynamics via water or wind erosion
+
+The final outcome would be to have an application where a user can generate a terrain model, adjusted with specific parameters and let the simulation run.
+
+### Fixing Terrain Generation
 
 To begin though I would like to start by improving some of the terrain generation. The octave perlin noise looks a little unrealistic and overly noisy. Some methods for improving this lie in hydraulic erosion, however there are some techniques to generate slightly more realistic terrain. As a start however, I needed to at least be able to alter the terrain while the application is running. I implimented an update function for the terrain, storing relevant world data on a component struct.
 
@@ -99,7 +99,7 @@ struct Terrain {
 }
 ```
 
-The initial perlin noise I was generating used a function to generate 3D perlin noise with the z value always set to 0. Changing the call to be implimented in the update function means I could scale the z value by the elapsed time in seconds to visualise changes in the mesh. I encountered a bug that, after some time, caused the terrain to vanish and strange flashes and lines to appear. Printing some values showed that the output of my perlin noise function exploded when one axis inputs to
+The initial perlin noise I was generating used a function to generate 3D perlin noise with the z value always set to 0. Changing the call to be implimented in the update function means I could scale the z value by the elapsed time in seconds to visualise changes in the mesh. I encountered a bug that caused, after some time, the terrain to vanish and strange flashes and lines to appear. Printing some values showed that the output of my perlin noise function exploded when one axis inputs to
 
 ```rust
 pub fn octave_perlin3d(
@@ -112,7 +112,7 @@ pub fn octave_perlin3d(
 ) -> f32
 ```
 
-the `octave_perlin3d` function increased above some threshold. The threshold itself, for my initial settings was 2.0. Diving deeper I discovered that this value changed as the octaves changed, due to the adjusted x, y and z values of the perlin3d function being above 255. It came down to using the _x, _y and _z values as shown below.
+the `octave_perlin3d` function increased above some threshold. The threshold itself, for my initial settings was 2.0. Diving deeper I discovered that this value changed as the octaves changed, due to the adjusted x, y and z values of the perlin3d function being above 255. It came down to the use of the _x, _y and _z values as shown below.
 
 ```rust
 fn perlin3d(x: f32, y: f32, z: f32, p: &Vec<i32>) -> f32 {
@@ -132,7 +132,7 @@ fn perlin3d(x: f32, y: f32, z: f32, p: &Vec<i32>) -> f32 {
 }
 ```
 
-Fixing this meant that the perlin noise could be generated correctly. To assist with some performance I added some code to run the noise generation in paralell that I used in another project.
+Fixing this meant that the perlin noise should be generated correctly for any value of inputs. Note my lack of tests for this assumption. To assist with some performance I used `rayon` crate to run the noise generation in parallel. While this implimentation is fairly crude it at least allows me to utilise more of my compute for almost no effort.
 
 ```rust
 heightmap
@@ -154,7 +154,29 @@ heightmap
     });
 ```
 
-The result looks a little weird, I find the slower terrain to almost be slightly intoxicating.
+The result looks a little weird but at least it is possible to visualise the noise generation and re-meshing of the heightmap. The rate of change can be adjusted by altering how much the z value is changed in each update call.
 ![fast changing terrain](./resources/1000x1000_fast.gif "1000x1000 Fast Rate")
 
 ![slow changing terrain](./resources/1000x1000_slow.gif "1000x1000 Slow Rate")
+
+With a working solution I would love to try 4D noise for visualising cloud-like structures. That task is further down the line however.
+
+### Improving Terrain Generation
+
+From what I have seen, Perlin noise seems to be a pretty widely used and reasonbly simple algorithm for generating noise. For my application however, I would like terrain that more accurately resembles, well, real terrain. Perlin noise generates a reasonable starting point but requires additional steps, such as hydraulic erosion, to achieve a more realistic terrain maps. While I will get to that eventually, there are a couple of algorithms for directly generating better looking terrain.
+
+#### Gradient Technique
+
+### Improved Meshing
+
+In its current state, the terrain generation uses an algorith to create a heightmap. Vertices, normal vectores and a vertex indices map are created to allow for Bevy to create a triangle mesh of the heightmap. This is repeated for every point on the heightmap, every time the heightmap is updated. On my current setup, a 1000x1000 heightmap takes approximately 15ms.
+
+### 
+
+---
+
+## Appendix A: Acknowledgements
+
+I have to acknowledge [Sebastian Lague](https://www.youtube.com/@SebastianLague) and the videos made on procedural terrain generation that inspired me to try sommething like this.
+
+[Josh](https://www.youtube.com/watch?v=gsJHzBTPG0Y)

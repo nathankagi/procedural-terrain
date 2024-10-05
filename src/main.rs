@@ -1,17 +1,16 @@
 use bevy::ecs::query;
+use bevy::prelude::*;
 use bevy::render::{
     mesh::{Indices, Mesh},
     render_asset::RenderAssetUsages,
     render_resource::PrimitiveTopology,
 };
-use bevy::{prelude::*, transform};
+use std::time::Instant;
 
 use procedural_terrain::heightmap::{HeightMap, Meshable};
 use procedural_terrain::noise;
 use rand::Rng;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
-};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 #[derive(Component, Debug)]
 struct Terrain {
@@ -151,6 +150,7 @@ fn update_terrain(
             let width = terrain.size;
             let scale = terrain.size as f32;
 
+            let t1 = Instant::now();
             heightmap
                 .map
                 .par_iter_mut()
@@ -168,8 +168,11 @@ fn update_terrain(
                             * scale;
                     });
                 });
+            // println!("Heightmap time: {:?}", t1.elapsed());
 
+            let t2 = Instant::now();
             let meshed = heightmap.triangle_mesh();
+            // println!("Meshing time: {:?}", t2.elapsed());
 
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, meshed.vertices);
             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, meshed.normals);

@@ -6,6 +6,10 @@ fn fade(t: f32) -> f32 {
     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
+fn fade_grad(t: f32) -> f32 {
+    return 30.0 * t * t * (t * (t - 2.0) + 1.0);
+}
+
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     (a + t * (b - a)).into()
 }
@@ -178,4 +182,16 @@ pub fn generate_permutation(seed: u32) -> Vec<i32> {
         p.push(permutation[i % 256]);
     }
     return p;
+}
+
+fn vnoise3d(x: f32, y: f32, z: f32) -> f32 {
+    let _x = x.floor();
+    let _y = y.floor();
+    let _z = z.floor();
+
+    let xf: f32 = x - x.floor() as f32;
+    let yf: f32 = y - y.floor() as f32;
+    let zf: f32 = z - z.floor() as f32;
+
+    return 0.0;
 }
