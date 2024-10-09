@@ -2,15 +2,11 @@
 
 ## Introduction
 
-I have been looking for some more simulation style projects to attempt. Recently I have been really enjoying some of the virtual environment apps. One I use all the time while working or studying is [Virtual Cottage](https://store.steampowered.com/app/1369320/Virtual_Cottage/). For some time I have been wanting to attempt a terrain simulation project and I thought a terrain simulation would work quite well for something like this.
-
-### Resources
-
-I have to acknowledge [Sebastian Lague](https://www.youtube.com/@SebastianLague) and the videos made on procedural terrain generation that partially inspired me to try sommething like this.
+I have been looking for some simulation style projects where using a lower level language would be beneficial. Although it seems almost every second person has implimented their own, I want to try my hand at a terrain/environment simulation.
 
 ## First Implementation
 
-I will be using Rust and [bevy](https://bevyengine.org/), a game engine built in rust, for this project. There were several candidates when choosing something to render these models. I was considering using a library to use Vulkan or OpenGL directly in either C/C++ or Rust. At least initially, the simplicity of rendering with bevy makes it a good choice to start so I can focus on the actual code rather than spending time getting a triangle on the screen.
+I will be using Rust and [bevy](https://bevyengine.org/), a game engine built in rust, for this project. Initially I was considering using a library to use Vulkan or OpenGL directly in either C/C++ or Rust. At some stage I would like to make a super minimal engine that I can use for this and future projects but the simplicity of bevy for getting something working made it very apppealing. It is also a nice excuse to continue learning rust as I don't have the opportunity to explore the language at work.
 
 ### Noise
 
