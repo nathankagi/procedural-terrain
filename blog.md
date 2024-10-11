@@ -36,10 +36,10 @@ Typically a value of 2 is suitable but in these extremes would need to be altere
 
 With some tweaking of the noise generation, some ambient and directional light I was able to get a nice wavy terrain using the following config:
 
-size: 5000x5000, x and y point count
-scale: 5000.0, maximum amplitude
-octaves: 8, number of octaves of noise
-persistence: 0.5, decay constant of the octave noise
+- size: 5000x5000, x and y point count
+- scale: 5000.0, maximum amplitude
+- octaves: 8, number of octaves of noise
+- persistence: 0.5, decay constant of the octave noise
 
 ```rust
 let size = 5000;
@@ -74,7 +74,7 @@ fn setup_lights(mut commands: Commands) {
 }
 ```
 
-## Improving Terrain Generation
+## Fixing Terrain Generation
 
 I started to do some planning for the next stages of the development and what I actually want this project to turn into now that I have an extremely simple example running. The goal for me was to create an environment simulator. The main features being:
 
@@ -154,3 +154,11 @@ The result looks a little weird, I find the slower terrain to almost be slightly
 ![fast changing terrain](./resources/1000x1000_fast.gif "1000x1000 Fast Rate")
 
 ![slow changing terrain](./resources/1000x1000_slow.gif "1000x1000 Slow Rate")
+
+## Improving Terrain Generation
+
+## Erosion
+
+After ironing out some issues, I feel quite happy with the terrain generation. Erosion, typically using partical simulated erosion techniques, is a fairly simple technique for generating nice looking terrain from a baseline such as the perlin noise I have been generating or even to give additional detail to terrain generated with improved algorithms.
+
+Up until now I have been working with a heightmap generated from the noise functions.
