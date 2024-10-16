@@ -9,7 +9,9 @@ I have bene looking for new project ideas, mostly I have been looking at project
 
 ## First Implementation
 
-I will be using Rust and [bevy](https://bevyengine.org/), a game engine built in rust, for this project. Initially I was considering using a library to use Vulkan or OpenGL directly in either C/C++ or Rust. At some stage I would like to make a super minimal engine that I can use for this and future projects but the simplicity of bevy for getting something working made it very apppealing. It is also a nice excuse to continue learning rust as I don't have the opportunity to explore the language at work.
+I will be using Rust and [bevy](https://bevyengine.org/), a game engine built in rust, for this project. Initially I was considering using a library to use Vulkan or OpenGL directly in either C/C++, Rust or even trying something like Zig. I have a strong appreciation for languages like C and Zig which dont have as much complexity like C++ and in some aspects Rust. I've recently been doing more C and C++ at work for other projects and so I thought I would try rust after having used it for one of my personal projects.
+
+At some stage I would like to make a super minimal engine as I would like to continue doing some of these kinds of projects but that is likely a number of projects in itself. For now the simplicity of getting something working in bevy is too appealing.
 
 ### Noise
 

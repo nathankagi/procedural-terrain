@@ -1,10 +1,9 @@
-use bevy::ecs::query;
+use bevy::prelude::*;
 use bevy::render::{
     mesh::{Indices, Mesh},
     render_asset::RenderAssetUsages,
     render_resource::PrimitiveTopology,
 };
-use bevy::{prelude::*, transform};
 
 use procedural_terrain::heightmap::{HeightMap, Meshable};
 use procedural_terrain::noise;
