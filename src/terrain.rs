@@ -1,3 +1,5 @@
+use nalgebra::Vector3;
+
 const MAX_LAYER_COUNT: i32 = 100;
 
 pub struct Terrain {
@@ -6,7 +8,7 @@ pub struct Terrain {
     map: Vec<Vec<Block>>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct Material {
     erosion: f32,
     cohesion: f32,
@@ -29,13 +31,6 @@ pub struct Block {
 #[derive(Copy, Clone)]
 pub struct Chunk {}
 
-#[repr(u8)]
-enum MaterialType {
-    Stone = 0,
-    Soil = 1,
-    Sand = 2,
-}
-
 impl Terrain {
     fn new(width: usize, height: usize) -> Self {
         Terrain {
@@ -43,6 +38,61 @@ impl Terrain {
             height,
             map: vec![vec![Block::new(); width]; height],
         }
+    }
+
+    fn height(&self, x: usize, y: usize) -> f32 {
+        return self.map[x][y].height;
+    }
+
+    fn material(&self, x: usize, y: usize) -> Material {
+        return self.map[x][y].layers.last().unwrap().material;
+    }
+
+    fn normal(&self, x: usize, y: usize) -> Vector3<f32> {
+        return Vector3::new(0.0, 0.0, 0.0);
+    }
+
+    fn gradient(&self, x: usize, y: usize) -> Vector3<f32> {
+        return Vector3::new(0.0, 0.0, 0.0);
+    }
+
+    fn add(&self, x: usize, y: usize, layer: Layer) -> () {
+        if ()
+    }
+
+    fn remove(&self, x: usize, y: usize, height: f32) -> Vec<Layer> {
+        let h = self.map[x][y].height;
+
+        let layers: Vec<Layer> = if (height < h) {
+            self.map[x][y].layers.last().unwrap().height = self.map[x][y].layers.last().unwrap().height - height;
+
+            return vec![Layer {
+                height,
+                material: self.map[x][y].layers.last().unwrap().material,
+            }];
+
+        } else if height == h {
+            return vec![self.map[x][y].layers.pop().unwrap()];
+
+        } else if height > h {
+            let l = self.map[x][y].layers.pop().unwrap();
+
+            self.map[x][y].layers.last().unwrap().height = self.map[x][y].layers.last().unwrap().height - height;
+
+            return vec![l, Layer {
+                height,
+                material: self.map[x][y].layers.last().unwrap().material,
+            }];
+        }
+        else {
+            return vec![];
+        }
+
+        return layers;
+    }
+
+    fn top(&self, x: usize, y: usize) -> &Layer {
+        return &self.map[x][y].layers.last().unwrap();
     }
 }
 
@@ -59,3 +109,27 @@ impl Block {
 // impl Layer {
 //     fn new() -> Self {}
 // }
+
+impl Layer {}
+
+impl Default for Layer {
+    fn default() -> Self {
+        Layer {
+            height: 0.0,
+            material: Material {
+                ..Default::default()
+            },
+        }
+    }
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Material {
+            erosion: 0.0,
+            cohesion: 0.0,
+            saturation: 0.0,
+            permeability: 0.0,
+        }
+    }
+}

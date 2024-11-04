@@ -2,6 +2,19 @@
 
 ## Notes
 
+### Terrain Data Model
+
+needs to be simple to re-mesh
+
+- calculating normals and vetices quickly, to do this you need height of cell and nearby cells
+    - need to update an array that contains vertices and normals to match bevy rendering
+- code should be easily computed in parallel, can split cells into chunks? 16x16 or something similar
+- need to call update on the mesh only when the mesh changes
+    - only need to update the vertex and normal data on cells that change
+    - keep track of updated cells, having to update a chunk seems pointless if the number of updated cells in a chunk is sparse, it is convenient for splitting into parallel ops though
+
+### ?
+
 ## Reference Material
 
 - [Nick's Blog](https://nickmcd.me/) - basically this project already implemented using custom engine in c++
