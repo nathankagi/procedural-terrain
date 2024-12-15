@@ -1,6 +1,6 @@
 use nalgebra::Vector3;
 
-const MAX_LAYER_COUNT: i32 = 100;
+const MAX_LAYER_COUNT: usize = 100;
 
 pub struct Terrain {
     width: usize,
@@ -24,7 +24,9 @@ pub struct Layer {
 
 #[derive(Clone)]
 pub struct Cell {
-    layers: Vec<Layer>,
+    // layers: Vec<Layer>,
+    layers: [Layer; MAX_LAYER_COUNT],
+    layer_index: i32,
 }
 
 #[derive(Copy, Clone)]
@@ -39,11 +41,16 @@ impl Terrain {
         }
     }
 
+    fn at(&mut self, x: usize, y: usize) -> &mut Cell {
+        return &mut self.cells[x][y];
+    }
+
     fn height(&self, x: usize, y: usize) -> f32 {
         return self.cells[x][y].height();
     }
 
     fn material(&self, x: usize, y: usize) -> Material {
+        // return self.cells[x][y].layers.last().unwrap().material.clone();
         return self.cells[x][y].layers.last().unwrap().material;
     }
 
@@ -76,49 +83,50 @@ impl Terrain {
     }
 
     fn gradient(&self, x: usize, y: usize) -> Vector3<f32> {
-        return Vector3::new(0.0, 0.0, 0.0);
+        let norm : Vector3<f32> = self.normal(x, y);
+        return Vector3::new(norm.x, 0.0, norm.z);
     }
 
-    fn add(&self, x: usize, y: usize, layer: Layer) -> () {
+    fn add(&mut self, x: usize, y: usize, layer: Layer) -> () {
         return ();
     }
 
-    fn remove(&mut self, x: usize, y: usize, height: f32) -> Vec<Layer> {
-        // while height > 0
-        // subtract top layer height from height, add to return layers
+    // fn remove(&mut self, x: usize, y: usize, height: f32) -> Vec<Layer> {
+    //     // while height > 0
+    //     // subtract top layer height from height, add to return layers
 
-        // let h = self.cells[x][y].height();
+    //     let h = self.cells[x][y].height();
 
-        // let layers: Vec<Layer> = if height < h {
-        //     let h = Some(self.cells[x][y].layers.last().unwrap().height);
-        //     // self.cells[x][y].layers.last().unwrap().height =
-        //     //     self.cells[x][y].layers.last().unwrap().height - height;
+    //     let layers: Vec<Layer> = if height < h {
+    //         let h = Some(self.cells[x][y].layers.last().unwrap().height);
+    //         // self.cells[x][y].layers.last().unwrap().height =
+    //         //     self.cells[x][y].layers.last().unwrap().height - height;
 
-        //     vec![Layer {
-        //         height,
-        //         material: self.cells[x][y].layers.last().unwrap().material,
-        //     }]
-        // } else if height == h {
-        //     vec![self.cells[x][y].layers.pop().unwrap()]
-        // } else if height > h {
-        //     let l = self.cells[x][y].layers.pop().unwrap();
+    //         vec![Layer {
+    //             height,
+    //             material: self.cells[x][y].layers.last().unwrap().material,
+    //         }]
+    //     } else if height == h {
+    //         vec![self.cells[x][y].layers.pop().unwrap()]
+    //     } else if height > h {
+    //         let l = self.cells[x][y].layers.pop().unwrap();
 
-        //     // self.cells[x][y].layers.last().unwrap().height =
-        //     //     self.cells[x][y].layers.last().unwrap().height - height;
+    //         // self.cells[x][y].layers.last().unwrap().height =
+    //         //     self.cells[x][y].layers.last().unwrap().height - height;
 
-        //     vec![
-        //         l,
-        //         Layer {
-        //             height,
-        //             material: self.cells[x][y].layers.last().unwrap().material,
-        //         },
-        //     ]
-        // } else {
-        //     return vec![];
-        // };
+    //         vec![
+    //             l,
+    //             Layer {
+    //                 height,
+    //                 material: self.cells[x][y].layers.last().unwrap().material,
+    //             },
+    //         ]
+    //     } else {
+    //         return vec![];
+    //     };
 
-        // return layers;
-    }
+    //     return layers;
+    // }
 
     fn top(&self, x: usize, y: usize) -> Option<&Layer> {
         return self.cells[x][y].layers.last();
@@ -128,8 +136,8 @@ impl Terrain {
 impl Cell {
     fn new() -> Self {
         Cell {
-            // layers: vec![Layer::new(), MAX_LAYER_COUNT],
-            layers: Vec::new(),
+            layers: [Layer::default(); MAX_LAYER_COUNT],
+            layer_index: 0,
         }
     }
 
@@ -140,10 +148,24 @@ impl Cell {
         }
         return h;
     }
+
+    // fn add(&self, layer: Layer) {
+
+    // }
+
+    // fn remove(&self, height : f32) -> Vec<Layer> {
+    //     let mut layers : Vec<Layer> = Vec::new();
+
+    //     return layers
+    // }
 }
 
 impl Layer {
-    fn new() -> Self {}
+    fn new() -> Self {
+        Layer {
+            ..Default::default()
+        }
+    }
 }
 
 impl Layer {}

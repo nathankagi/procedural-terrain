@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
+use bevy::render::RenderPlugin;
 use bevy::render::{
     mesh::{Indices, Mesh},
     render_asset::RenderAssetUsages,
@@ -23,7 +25,13 @@ struct Terrain {
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(RenderPlugin {
+            render_creation: RenderCreation::Automatic(WgpuSettings {
+                backends: Some(Backends::VULKAN),
+                ..default()
+            }),
+            ..default()
+        }))
         .add_systems(Startup, (setup, setup_lights, setup_ambient_light))
         .add_systems(Update, (update_terrain))
         .run();

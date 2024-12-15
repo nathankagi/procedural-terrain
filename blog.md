@@ -170,10 +170,13 @@ Up until now I have been working with a heightmap generated from the noise funct
 
 My initial thought went to [voxels](https://en.wikipedia.org/wiki/Voxel), or some variant such as [octrees](https://en.wikipedia.org/wiki/Octree), however, the disrete nature makes the terrain erosion also a discrete system. I want to maintain a reasonably high resolution on the meshed terrain though and so I played around the idea of fillable voxels, extended the octree where necessary to create additional detail. A fillable voxel would allow for the "height" to be calculated byu the filled volume of the voxel. I actually quite like this concept for something such as groundwater systems and fluid diffusion but that is for a later date. In the "fillable voxel" model, if a different material is deposited on another material, the actual height can be the sum of the filled voxels. At this stage I realised that really what I had thought of was a layer map where each block on the grid has an array of layers that makes up the terrain in that verticle section. Material can be added to or removed from layers with new layers only needed for a change of material type. For this system, if there are many material types, or similar to reality, the material is some distribution of all the possible parameters, the layers stack up very quickly as particles move around. However, this simulation will mostly play with several more discrete material types to mimic material such as stone, soil or sand. This means a lot of the material ends up condensing into large blocks of terrain layers.
 
-I found a [blog](https://nickmcd.me/) with a couple of posts implementing basically the exact thing I wanted to implement and a [post](https://nickmcd.me/2022/04/15/soilmachine/) on a data model for this application seemed to progress towards the style of model I was thinking of too. Reading further into the content it seems like a lot of works are very similar to what I've been wanting to try out. Given than I have started, and the fact that I doubt almost any project is truly unique, I'll continue my own implementation of this project.
+I found a [blog](https://nickmcd.me/) with a couple of posts implementing basically the exact thing I wanted to implement and a [post](https://nickmcd.me/2022/04/15/soilmachine/) on a data model for this application seemed to progress towards the style of model I was thinking of too. Reading further into the content it seems like a lot of works are very similar to what I've been wanting to try out.
 
 For an actual data model I have several criteria:
 
 - The terrain and operations are easily computed in parallel
-- Fast access for regularly used data such as overall terrain height
+- Fast access for regularly used data such as terrain height, normals, etc
+- Able to update terrain ouptuts for meshes efficiently (e.g. grid chunks)
 - 
+
+
