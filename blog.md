@@ -177,6 +177,38 @@ For an actual data model I have several criteria:
 - The terrain and operations are easily computed in parallel
 - Fast access for regularly used data such as terrain height, normals, etc
 - Able to update terrain ouptuts for meshes efficiently (e.g. grid chunks)
-- 
+- Simplicity
+
+### Implementation
+
+After having mulled over rough implementation ideas I started to actually write code. I started with a couple of structs I'd use for each of the elements. I added a `Chunk` struct, mostly to remind myself of the idea but I don't think I will actually end up using this for updates to the terrain mesh.
+
+```rust
+pub struct Terrain {
+    width: usize,
+    height: usize,
+    cells: Vec<Vec<Cell>>,
+}
+
+pub struct Material {
+    erosion: f32,
+    cohesion: f32,
+    saturation: f32,
+    permeability: f32,
+}
+
+pub struct Layer {
+    height: f32,
+    material: Material,
+}
+
+pub struct Cell {
+    // layers: Vec<Layer>,
+    layers: [Layer; MAX_LAYER_COUNT],
+    layer_index: i32,
+}
+
+pub struct Chunk {}
+```
 
 

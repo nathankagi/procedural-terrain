@@ -24,9 +24,9 @@ pub struct Layer {
 
 #[derive(Clone)]
 pub struct Cell {
-    // layers: Vec<Layer>,
-    layers: [Layer; MAX_LAYER_COUNT],
-    layer_index: i32,
+    layers: Vec<Layer>,
+    // layers: [Layer; MAX_LAYER_COUNT],
+    layer_index: usize,
 }
 
 #[derive(Copy, Clone)]
@@ -83,7 +83,7 @@ impl Terrain {
     }
 
     fn gradient(&self, x: usize, y: usize) -> Vector3<f32> {
-        let norm : Vector3<f32> = self.normal(x, y);
+        let norm: Vector3<f32> = self.normal(x, y);
         return Vector3::new(norm.x, 0.0, norm.z);
     }
 
@@ -91,7 +91,9 @@ impl Terrain {
         return ();
     }
 
-    // fn remove(&mut self, x: usize, y: usize, height: f32) -> Vec<Layer> {
+    fn remove(&mut self, x: usize, y: usize, height: f32) -> (Layer, f32) {
+        return (Layer::new(), 0.0);
+    }
     //     // while height > 0
     //     // subtract top layer height from height, add to return layers
 
@@ -128,15 +130,16 @@ impl Terrain {
     //     return layers;
     // }
 
-    fn top(&self, x: usize, y: usize) -> Option<&Layer> {
-        return self.cells[x][y].layers.last();
+    fn top(&self, x: usize, y: usize) -> &Layer {
+        return &self.cells[x][y].layers[self.cells[x][y].layer_index];
     }
 }
 
 impl Cell {
     fn new() -> Self {
         Cell {
-            layers: [Layer::default(); MAX_LAYER_COUNT],
+            // layers: [Layer::default(); MAX_LAYER_COUNT],
+            layers: Vec::new(),
             layer_index: 0,
         }
     }
