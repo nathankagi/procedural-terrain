@@ -5,7 +5,8 @@ use rayon::prelude::*;
 use std::{error::Error, usize};
 
 pub trait Meshable {
-    fn triangle_mesh(&self) -> Mesh;
+    fn mesh_triangles(&self) -> Mesh;
+    fn remesh_triangles(&mut self, mesh: &mut Mesh, modified: Vec<(u32, u32)>);
 }
 
 pub trait CSV {
@@ -27,7 +28,6 @@ pub struct Mesh {
     pub normals: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
     pub indices: Vec<u32>,
-    pub values: Vec<f32>,
 }
 
 pub fn create_height_map() -> Vec<Vec<f32>> {
@@ -82,7 +82,7 @@ impl HeightMap {
 }
 
 impl Meshable for HeightMap {
-    fn triangle_mesh(&self) -> Mesh {
+    fn mesh_triangles(&self) -> Mesh {
         let height = self.height();
         let width = self.width();
 
@@ -151,8 +151,11 @@ impl Meshable for HeightMap {
             normals: normals,
             uvs: uvs,
             indices: indices,
-            values: vec![0.0; width * height],
         }
+    }
+
+    fn remesh_triangles(&mut self, mesh: &mut Mesh, modified: Vec<(u32, u32)>) {
+        self.mesh_triangles();
     }
 }
 

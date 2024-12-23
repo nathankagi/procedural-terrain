@@ -1,5 +1,7 @@
 use nalgebra::Vector3;
 
+use crate::heightmap::{self, Mesh, Meshable};
+
 const MAX_LAYER_COUNT: usize = 100;
 
 pub struct Terrain {
@@ -8,7 +10,7 @@ pub struct Terrain {
     cells: Vec<Vec<Cell>>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Material {
     erosion: f32,
     cohesion: f32,
@@ -25,7 +27,6 @@ pub struct Layer {
 #[derive(Clone)]
 pub struct Cell {
     layers: Vec<Layer>,
-    // layers: [Layer; MAX_LAYER_COUNT],
     layer_index: usize,
 }
 
@@ -50,7 +51,6 @@ impl Terrain {
     }
 
     fn material(&self, x: usize, y: usize) -> Material {
-        // return self.cells[x][y].layers.last().unwrap().material.clone();
         return self.cells[x][y].layers.last().unwrap().material;
     }
 
@@ -87,61 +87,45 @@ impl Terrain {
         return Vector3::new(norm.x, 0.0, norm.z);
     }
 
-    fn add(&mut self, x: usize, y: usize, layer: Layer) -> () {
-        return ();
+    fn add(&mut self, x: usize, y: usize, layer: Layer) {
+        self.cells[x][y].add(layer);
     }
 
-    fn remove(&mut self, x: usize, y: usize, height: f32) -> (Layer, f32) {
-        return (Layer::new(), 0.0);
-    }
-    //     // while height > 0
-    //     // subtract top layer height from height, add to return layers
-
-    //     let h = self.cells[x][y].height();
-
-    //     let layers: Vec<Layer> = if height < h {
-    //         let h = Some(self.cells[x][y].layers.last().unwrap().height);
-    //         // self.cells[x][y].layers.last().unwrap().height =
-    //         //     self.cells[x][y].layers.last().unwrap().height - height;
-
-    //         vec![Layer {
-    //             height,
-    //             material: self.cells[x][y].layers.last().unwrap().material,
-    //         }]
-    //     } else if height == h {
-    //         vec![self.cells[x][y].layers.pop().unwrap()]
-    //     } else if height > h {
-    //         let l = self.cells[x][y].layers.pop().unwrap();
-
-    //         // self.cells[x][y].layers.last().unwrap().height =
-    //         //     self.cells[x][y].layers.last().unwrap().height - height;
-
-    //         vec![
-    //             l,
-    //             Layer {
-    //                 height,
-    //                 material: self.cells[x][y].layers.last().unwrap().material,
-    //             },
-    //         ]
-    //     } else {
-    //         return vec![];
-    //     };
-
-    //     return layers;
-    // }
-
-    fn top(&self, x: usize, y: usize) -> &Layer {
-        return &self.cells[x][y].layers[self.cells[x][y].layer_index];
+    fn remove(&mut self, x: usize, y: usize, height: f32) -> Layer {
+        return self.cells[x][y].remove(height);
     }
 }
 
 impl Cell {
     fn new() -> Self {
         Cell {
-            // layers: [Layer::default(); MAX_LAYER_COUNT],
             layers: Vec::new(),
             layer_index: 0,
         }
+    }
+
+    fn add(&mut self, layer: Layer) {
+        if self.layers[self.layer_index].material == layer.material {
+            self.layers[self.layer_index].height =
+                self.layers[self.layer_index].height + layer.height;
+        } else {
+            self.layers.push(layer);
+            self.layer_index = self.layers.len();
+        }
+    }
+
+    fn remove(&mut self, height: f32) -> Layer {
+        return if height < self.layers[self.layer_index].height {
+            self.layers[self.layer_index].height = self.layers[self.layer_index].height - height;
+            let mut o = self.layers[self.layer_index].clone();
+            o.height = height;
+            o
+        } else {
+            let o = self.layers[self.layer_index].clone();
+            self.layers.remove(self.layer_index);
+            self.layer_index = self.layers.len();
+            o
+        };
     }
 
     fn height(&self) -> f32 {
@@ -152,15 +136,9 @@ impl Cell {
         return h;
     }
 
-    // fn add(&self, layer: Layer) {
-
-    // }
-
-    // fn remove(&self, height : f32) -> Vec<Layer> {
-    //     let mut layers : Vec<Layer> = Vec::new();
-
-    //     return layers
-    // }
+    fn depth(&self) -> usize {
+        return self.layers.len();
+    }
 }
 
 impl Layer {
@@ -191,6 +169,66 @@ impl Default for Material {
             cohesion: 0.0,
             saturation: 0.0,
             permeability: 0.0,
+        }
+    }
+}
+
+impl Meshable for Terrain {
+    fn mesh_triangles(&self) -> Mesh {
+        let height = self.height;
+        let width = self.width;
+
+        let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(width * height);
+        let mut normals: Vec<[f32; 3]> = Vec::with_capacity(width * height);
+        let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(width * height);
+        let mut indices: Vec<u32> = Vec::new();
+
+        for y in 0..width {
+            for x in 0..height {
+                // UVs
+                uvs.push([x as f32 / width as f32, y as f32 / height as f32]);
+
+                // Normals
+                let normal = self.normal(x, y);
+                normals.push([normal.x as f32, normal.y as f32, normal.z as f32]);
+
+                // Indices
+                if x < (height - 1) && y < (width - 1) {
+                    let top_left = (x + y * width) as u32;
+                    let top_right = ((x + 1) + y * width) as u32;
+                    let bottom_left = (x + (y + 1) * width) as u32;
+                    let bottom_right = ((x + 1) + (y + 1) * width) as u32;
+
+                    indices.push(top_left);
+                    indices.push(bottom_left);
+                    indices.push(top_right);
+
+                    indices.push(top_right);
+                    indices.push(bottom_left);
+                    indices.push(bottom_right);
+                }
+
+                // Vertices
+                vertices.push([x as f32, self.height(x, y) as f32, y as f32]);
+            }
+        }
+
+        Mesh {
+            vertices: vertices,
+            normals: normals,
+            uvs: uvs,
+            indices: indices,
+        }
+    }
+
+    fn remesh_triangles(&mut self, mesh: &mut Mesh, modified: Vec<(u32, u32)>) {
+        for (x, y) in modified {
+            let idx = (y * self.width as u32 + x) as usize;
+
+            let normal = self.normal(x as usize, y as usize);
+            mesh.normals[idx] = [normal.x as f32, normal.y as f32, normal.z as f32];
+
+            mesh.vertices[idx] = [x as f32, self.height(x as usize, y as usize), y as f32];
         }
     }
 }

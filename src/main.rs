@@ -87,7 +87,7 @@ fn setup(
         }
     }
 
-    let meshed = heightmap.triangle_mesh();
+    let meshed = heightmap.mesh_triangles();
 
     let mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -177,7 +177,7 @@ fn update_terrain(
                     });
                 });
 
-            let meshed = heightmap.triangle_mesh();
+            let meshed = heightmap.mesh_triangles();
 
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, meshed.vertices);
             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, meshed.normals);
