@@ -1,20 +1,21 @@
 use bevy::prelude::*;
 use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
-use bevy::render::RenderPlugin;
 use bevy::render::{
     mesh::{Indices, Mesh},
     render_asset::RenderAssetUsages,
     render_resource::PrimitiveTopology,
 };
 
-use procedural_terrain::heightmap::{HeightMap, Meshable};
-use procedural_terrain::noise;
+use procedural_terrain::heightmap::HeightMap;
+use procedural_terrain::heightmap::{self, generate};
+use procedural_terrain::mesh::Meshable;
+use procedural_terrain::{noise, terrain};
 use rand::Rng;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 
-#[derive(Component, Debug)]
+#[derive(Component)]
 struct Terrain {
     size: usize,
     octaves: i32,
@@ -34,7 +35,7 @@ fn main() {
         // }))
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, (setup, setup_lights, setup_ambient_light))
-        .add_systems(Update, (update_terrain))
+        // .add_systems(Update, (update_terrain))
         .run();
 }
 
@@ -44,13 +45,11 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    // Params
     let size = 1000;
-    let octaves = 7;
-    let persistence = 0.5;
-
-    let width = size;
-    let height = size;
-    let scale = size as f32;
+    let mut rng = rand::thread_rng();
+    let seed = rng.gen::<u32>();
+    let permutation = noise::generate_permutation(seed);
 
     // Camera
     commands.spawn(Camera3dBundle {
@@ -63,29 +62,21 @@ fn setup(
             Vec3::new((size as f32) / 2.0, 0.0, (size as f32) / 2.0),
             Vec3::Y,
         ),
-        ..Default::default()
+        ..default()
     });
 
     // Terrain Mesh
-    let mut heightmap = HeightMap::new(size, size);
+    let params = heightmap::FractalPerlinParams {
+        height: size,
+        width: size,
+        scale: size as f32,
+        octaves: 7,
+        persistence: 0.5,
+        seed: seed,
+    };
 
-    let mut rng = rand::thread_rng();
-    let seed = rng.gen::<u32>();
-    let permutation = noise::generate_permutation(seed);
-
-    for i in 0..height {
-        for j in 0..width {
-            heightmap.map[i][j] = noise::octave_perlin3d(
-                i as f32 / height as f32,
-                j as f32 / width as f32,
-                0.0,
-                octaves,
-                persistence,
-                &permutation,
-            ) as f32
-                * scale;
-        }
-    }
+    let heightmap = heightmap::generate(heightmap::Algorithms::FractalPerlin(params.clone()));
+    // let mut terrain = terrain::Terrain::new(size, size);
 
     let meshed = heightmap.mesh_triangles();
 
@@ -103,8 +94,8 @@ fn setup(
     commands.spawn(
         (Terrain {
             size: size,
-            octaves: octaves,
-            persistence: persistence,
+            octaves: params.octaves,
+            persistence: params.persistence,
             permutation: permutation.clone(),
             mesh_handle: mesh_handle.clone(),
         }),
@@ -126,21 +117,32 @@ fn setup(
 }
 
 fn setup_ambient_light(mut ambient_light: ResMut<AmbientLight>) {
-    ambient_light.brightness = 200.0;
+    // ambient_light.brightness = 1000.0;
 }
 
 fn setup_lights(mut commands: Commands) {
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
-            intensity: 30_000_000_000.0,
-            range: 10_000.0,
-            radius: 10_000.0,
+    // commands.spawn(PointLightBundle {
+    //     point_light: PointLight {
+    //         intensity: 30_000_000_000.0,
+    //         range: 10_000.0,
+    //         radius: 10_000.0,
+    //         shadows_enabled: true,
+    //         ..Default::default()
+    //     },
+    //     transform: Transform::from_translation(Vec3::new(500.0, 1000.0, 500.0))
+    //         .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+    //     ..Default::default()
+    // });
+
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            illuminance: light_consts::lux::AMBIENT_DAYLIGHT,
             shadows_enabled: true,
-            ..Default::default()
+            ..default()
         },
-        transform: Transform::from_translation(Vec3::new(500.0, 1000.0, 500.0))
+        transform: Transform::from_translation(Vec3::new(-500.0, 1000.0, 500.0))
             .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
-        ..Default::default()
+        ..default()
     });
 }
 

@@ -1,6 +1,7 @@
 use nalgebra::Vector3;
 
-use crate::heightmap::{self, Mesh, Meshable};
+use crate::heightmap::HeightMap;
+use crate::mesh::{Mesh, Meshable};
 
 const MAX_LAYER_COUNT: usize = 100;
 
@@ -34,7 +35,7 @@ pub struct Cell {
 pub struct Chunk {}
 
 impl Terrain {
-    fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize) -> Self {
         Terrain {
             width,
             height,
@@ -42,19 +43,19 @@ impl Terrain {
         }
     }
 
-    fn at(&mut self, x: usize, y: usize) -> &mut Cell {
+    pub fn at(&mut self, x: usize, y: usize) -> &mut Cell {
         return &mut self.cells[x][y];
     }
 
-    fn height(&self, x: usize, y: usize) -> f32 {
+    pub fn height(&self, x: usize, y: usize) -> f32 {
         return self.cells[x][y].height();
     }
 
-    fn material(&self, x: usize, y: usize) -> Material {
+    pub fn material(&self, x: usize, y: usize) -> Material {
         return self.cells[x][y].layers.last().unwrap().material;
     }
 
-    fn normal(&self, x: usize, y: usize) -> Vector3<f32> {
+    pub fn normal(&self, x: usize, y: usize) -> Vector3<f32> {
         let height_l = if x > 0 {
             self.cells[x - 1][y].height()
         } else {
@@ -82,29 +83,33 @@ impl Terrain {
         return Vector3::new(height_l - height_r, 2.0, height_d - height_u).normalize();
     }
 
-    fn gradient(&self, x: usize, y: usize) -> Vector3<f32> {
+    pub fn gradient(&self, x: usize, y: usize) -> Vector3<f32> {
         let norm: Vector3<f32> = self.normal(x, y);
-        return Vector3::new(norm.x, 0.0, norm.z);
+        return Vector3::new(-norm.x, 0.0, -norm.z);
     }
 
-    fn add(&mut self, x: usize, y: usize, layer: Layer) {
+    pub fn add(&mut self, x: usize, y: usize, layer: Layer) {
         self.cells[x][y].add(layer);
     }
 
-    fn remove(&mut self, x: usize, y: usize, height: f32) -> Layer {
+    pub fn remove(&mut self, x: usize, y: usize, height: f32) -> Layer {
         return self.cells[x][y].remove(height);
+    }
+
+    pub fn add_heightmap(&mut self, map: HeightMap) {
+        // add to terrain data from a heightmap
     }
 }
 
 impl Cell {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Cell {
             layers: Vec::new(),
             layer_index: 0,
         }
     }
 
-    fn add(&mut self, layer: Layer) {
+    pub fn add(&mut self, layer: Layer) {
         if self.layers[self.layer_index].material == layer.material {
             self.layers[self.layer_index].height =
                 self.layers[self.layer_index].height + layer.height;
@@ -114,7 +119,7 @@ impl Cell {
         }
     }
 
-    fn remove(&mut self, height: f32) -> Layer {
+    pub fn remove(&mut self, height: f32) -> Layer {
         return if height < self.layers[self.layer_index].height {
             self.layers[self.layer_index].height = self.layers[self.layer_index].height - height;
             let mut o = self.layers[self.layer_index].clone();
@@ -128,7 +133,7 @@ impl Cell {
         };
     }
 
-    fn height(&self) -> f32 {
+    pub fn height(&self) -> f32 {
         let mut h: f32 = 0.0;
         for layer in self.layers.iter() {
             h = h + layer.height;
@@ -136,13 +141,13 @@ impl Cell {
         return h;
     }
 
-    fn depth(&self) -> usize {
+    pub fn depth(&self) -> usize {
         return self.layers.len();
     }
 }
 
 impl Layer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Layer {
             ..Default::default()
         }

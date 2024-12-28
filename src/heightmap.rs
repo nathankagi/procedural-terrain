@@ -1,63 +1,42 @@
-use crate::noise;
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use rayon::prelude::*;
 use std::{error::Error, usize};
 
-pub trait Meshable {
-    fn mesh_triangles(&self) -> Mesh;
-    fn remesh_triangles(&mut self, mesh: &mut Mesh, modified: Vec<(u32, u32)>);
-}
-
-pub trait CSV {
-    fn save(&self) -> Result<(), Box<dyn Error>>;
-    fn load() -> Result<HeightMap, Box<dyn Error>>;
-}
-
-pub trait PNG {
-    fn save(&self) -> Result<(), Box<dyn Error>>;
-    fn load() -> Result<HeightMap, Box<dyn Error>>;
-}
+use crate::mesh::{Mesh, Meshable};
+use crate::noise;
 
 pub struct HeightMap {
     pub map: Vec<Vec<f32>>,
 }
 
-pub struct Mesh {
-    pub vertices: Vec<[f32; 3]>,
-    pub normals: Vec<[f32; 3]>,
-    pub uvs: Vec<[f32; 2]>,
-    pub indices: Vec<u32>,
+#[derive(Clone)]
+pub struct FractalPerlinParams {
+    pub height: usize,
+    pub width: usize,
+    pub scale: f32,
+    pub octaves: i32,
+    pub persistence: f32,
+    pub seed: u32,
 }
 
-pub fn create_height_map() -> Vec<Vec<f32>> {
-    let width = 20;
-    let height = 20;
-    let scale = 200.0;
+#[derive(Clone)]
+pub struct GradientFractalPerlinParams {
+    pub height: usize,
+    pub width: usize,
+    pub scale: f32,
+    pub octaves: i32,
+    pub persistence: f32,
+    pub seed: u32,
+}
 
-    let octaves = 6;
-    let persistence: f32 = 0.5;
+#[derive(Clone)]
+pub struct DiffusionLimitedAggregationParams {}
 
-    let mut rng = rand::thread_rng();
-    let seed = rng.gen::<u32>();
-    let permutation = noise::generate_permutation(seed);
-
-    let mut noise_map = vec![vec![0.0; width]; height];
-    for i in 0..height {
-        for j in 0..width {
-            noise_map[i][j] = noise::octave_perlin3d(
-                i as f32 / height as f32,
-                j as f32 / width as f32,
-                0.0,
-                octaves,
-                persistence,
-                &permutation,
-            ) as f32
-                * scale;
-        }
-    }
-
-    return noise_map;
+pub enum Algorithms {
+    FractalPerlin(FractalPerlinParams),
+    GradientFractalPerlin(GradientFractalPerlinParams),
+    DiffusionLimitedAggregation(DiffusionLimitedAggregationParams),
 }
 
 impl HeightMap {
@@ -159,24 +138,47 @@ impl Meshable for HeightMap {
     }
 }
 
-impl CSV for HeightMap {
-    fn save(&self) -> Result<(), Box<dyn Error>> {
-        let file_path = "output.csv";
-
-        let mut writer = csv::Writer::from_path(file_path)?;
-
-        for row in &self.map {
-            writer.write_record(row.iter().map(|&f| f.to_string()))?;
+pub fn generate(algorithm: Algorithms) -> HeightMap {
+    match algorithm {
+        Algorithms::FractalPerlin(fractal_perlin_params) => {
+            generate_fractal_perlin(fractal_perlin_params)
         }
+        Algorithms::GradientFractalPerlin(gradient_fractal_perlin_params) => {
+            generate_gradient_frac_perlin(gradient_fractal_perlin_params)
+        }
+        Algorithms::DiffusionLimitedAggregation(diffusion_limited_aggregation_params) => {
+            generate_diff_lim_agg(diffusion_limited_aggregation_params)
+        }
+    }
+}
 
-        writer.flush()?;
+pub fn generate_fractal_perlin(params: FractalPerlinParams) -> HeightMap {
+    // let mut rng = rand::thread_rng();
+    // let seed = rng.gen::<u32>();
+    let permutation = noise::generate_permutation(params.seed);
 
-        Ok(())
+    let mut hmap = HeightMap::new(params.width, params.height);
+    for i in 0..params.height {
+        for j in 0..params.width {
+            hmap.map[i][j] = noise::octave_perlin3d(
+                i as f32 / params.height as f32,
+                j as f32 / params.width as f32,
+                0.0,
+                params.octaves,
+                params.persistence,
+                &permutation,
+            ) as f32
+                * params.scale;
+        }
     }
 
-    fn load() -> Result<HeightMap, Box<dyn Error>> {
-        return Ok(HeightMap::new(0, 0));
-    }
+    return hmap;
+}
+pub fn generate_gradient_frac_perlin(params: GradientFractalPerlinParams) -> HeightMap {
+    HeightMap::new(10, 10)
+}
+pub fn generate_diff_lim_agg(params: DiffusionLimitedAggregationParams) -> HeightMap {
+    HeightMap::new(10, 10)
 }
 
 fn calculate_normals(height_map: &Vec<Vec<f32>>) -> Vec<[f32; 3]> {

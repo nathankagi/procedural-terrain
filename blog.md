@@ -203,12 +203,9 @@ pub struct Layer {
 }
 
 pub struct Cell {
-    // layers: Vec<Layer>,
-    layers: [Layer; MAX_LAYER_COUNT],
+    layers: Vec<Layer>,
     layer_index: i32,
 }
 
 pub struct Chunk {}
 ```
-
-
