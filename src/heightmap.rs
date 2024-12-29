@@ -1,7 +1,6 @@
 use nalgebra::{Vector2, Vector3};
 use rand::Rng;
 use rayon::prelude::*;
-use std::{error::Error, usize};
 
 use crate::mesh::{Mesh, Meshable};
 use crate::noise;
@@ -21,17 +20,15 @@ pub struct FractalPerlinParams {
 }
 
 #[derive(Clone)]
-pub struct GradientFractalPerlinParams {
-    pub height: usize,
-    pub width: usize,
-    pub scale: f32,
-    pub octaves: i32,
-    pub persistence: f32,
-    pub seed: u32,
-}
+pub struct GradientFractalPerlinParams {}
 
 #[derive(Clone)]
-pub struct DiffusionLimitedAggregationParams {}
+pub struct DiffusionLimitedAggregationParams {
+    pub height: usize,
+    pub width: usize,
+    pub spawns: Vec<Vector2<usize>>,
+    pub absorbtion: f32,
+}
 
 pub enum Algorithms {
     FractalPerlin(FractalPerlinParams),
@@ -174,9 +171,11 @@ pub fn generate_fractal_perlin(params: FractalPerlinParams) -> HeightMap {
 
     return hmap;
 }
+
 pub fn generate_gradient_frac_perlin(params: GradientFractalPerlinParams) -> HeightMap {
     HeightMap::new(10, 10)
 }
+
 pub fn generate_diff_lim_agg(params: DiffusionLimitedAggregationParams) -> HeightMap {
     HeightMap::new(10, 10)
 }

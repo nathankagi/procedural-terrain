@@ -84,8 +84,8 @@ fn setup_lights(mut commands: Commands) {
 I started to do some planning for the next stages of the development and what I actually want this project to turn into now that I have an extremely simple example running. The goal for me was to create an environment simulator. The main features being:
 
 - terrain generation including material types such as sand, dirt and stone.
-- cloud generation and movement
 - terrain dynamics via water or wind erosion
+- cloud generation and movement
 
 To begin though I would like to start by improving some of the terrain generation. The octave perlin noise looks a little unrealistic and overly noisy. Some methods for improving this lie in hydraulic erosion, however there are some techniques to generate slightly more realistic terrain. As a start however, I needed to at least be able to alter the terrain while the application is running. I implimented an update function for the terrain, storing relevant world data on a component struct.
 
@@ -162,6 +162,38 @@ The result looks a little weird, I find the slower terrain to almost be slightly
 
 ## Improving Terrain Generation
 
+While Perlin noise can create some nice starting points, before I start with erosion and the full terrain model, I'd like to expand upon the heightmap generation. There are plenty of techniques for creating seemingly more realistic terrain. For example, erosion modelling is technically one of these but is more of a post-processing technique applied to a generated heightmap. For this I would like to focus on alternate algorithms of generating the heightmap itself. I spent a reasonable amount of time reading various papers on these techniques including:
+
+- [Gradient Terrain Authoring](https://hal.science/hal-03577171/file/2022-gradientterrains.pdf)
+- [The Synthesis and Rendering of Eroded Fractal Terrains](https://history.siggraph.org/learning/the-synthesis-and-rendering-of-eroded-fractal-terrains-by-musgrave-kolb-and-mace/)
+- [Realtime Procedural Terrain Generation](http://web.mit.edu/cesium/Public/terrain.pdf)
+
+amongst many others. I found [this](https://www.cs.cmu.edu/~112-n23/notes/student-tp-guides/Terrain.pdf) article to be an interesting overview of various techniques used and a good introduction I wish I had found earlier. Eventually I stumbled upon [Josh's Channel](https://www.youtube.com/watch?v=gsJHzBTPG0Y) discussing exactly the topic I was interested in. I found [Diffusion-limited Aggregation](https://pmc.polytechnique.fr/pagesperso/dg/cours/biblio/PRB%2027,%205686%20(1983)%20Witten,%20Sander%20%5BDiffusion-limited%20aggregation%5D.pdf) (DLA) to be an interesting and very appealing option for an improved algorithm, epecially after reading through the original publication.
+
+See [Directed Diffusion-limited Aggregation](https://alea.impa.br/articles/v14/14-15.pdf) (DDLA) for an extension.
+
+I decided to implement DLA but first I wanted to convert some of my code to allow for additional algorithms if I find a nice one later. The following enum and `generate` function will allow me to pass in parameter structs to determine the algorithm I'd like to use for terrain generation. It feels like a reasonable solution for now.
+
+```rust
+pub enum Algorithms {
+    FractalPerlin(FractalPerlinParams),
+    DiffusionLimitedAggregation(DiffusionLimitedAggregationParams),
+}
+
+pub fn generate(algorithm: Algorithms) -> HeightMap {
+    match algorithm {
+        Algorithms::FractalPerlin(fractal_perlin_params) => {
+            generate_fractal_perlin(fractal_perlin_params)
+        }
+        Algorithms::DiffusionLimitedAggregation(diffusion_limited_aggregation_params) => {
+            generate_diff_lim_agg(diffusion_limited_aggregation_params)
+        }
+    }
+}
+```
+
+
+
 ## Terrain Model
 
 After ironing out some issues, I feel quite happy with the terrain generation. Erosion, typically using partical simulated erosion techniques, is a fairly simple technique for generating nice looking terrain from a baseline such as the perlin noise I have been generating or even to give additional detail to terrain generated with improved algorithms.
@@ -209,3 +241,8 @@ pub struct Cell {
 
 pub struct Chunk {}
 ```
+
+### Erosion
+
+## Performance
+
