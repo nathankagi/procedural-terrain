@@ -5,15 +5,16 @@ use bevy::render::{
     render_asset::RenderAssetUsages,
     render_resource::PrimitiveTopology,
 };
-
-use procedural_terrain::heightmap::HeightMap;
-use procedural_terrain::heightmap::{self, generate};
-use procedural_terrain::mesh::Meshable;
-use procedural_terrain::{noise, terrain};
 use rand::Rng;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
+
+use procedural_terrain::heightmap::HeightMap;
+use procedural_terrain::heightmap::{self, generate};
+use procedural_terrain::heightmaps::{self, dla};
+use procedural_terrain::mesh::Meshable;
+use procedural_terrain::{noise, terrain};
 
 #[derive(Component)]
 struct Terrain {
@@ -34,12 +35,31 @@ fn main() {
         //     ..default()
         // }))
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, (setup, setup_lights, setup_ambient_light))
+        .add_systems(Startup, (tests, setup, setup_lights, setup_ambient_light))
         // .add_systems(Update, (update_terrain))
         .run();
 }
 
 // Setup functions
+fn tests(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let params = heightmaps::dla::DiffusionLimitedAggregationParams {
+        height: 500,
+        width: 500,
+        spawns: vec![(100, 100)],
+        // spawns: vec![Vec2::new(10.0, 10.0)],
+        t: 1.0,
+        particles: 500,
+        layers: 1,
+        density: 1.0,
+    };
+
+    let map = heightmaps::dla::generate(params);
+}
+
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
