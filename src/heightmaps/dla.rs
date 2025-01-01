@@ -1,13 +1,17 @@
 use image::{Rgb, RgbImage};
+use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Add,
+};
 
 #[derive(Clone)]
 pub struct DiffusionLimitedAggregationParams {
     pub height: usize,
     pub width: usize,
-    pub spawns: Vec<(u32, u32)>,
+    pub spawns: Vec<Point>,
     pub t: f32, // absorbtion coefficient parameter
     pub particles: u32,
     pub layers: u32,
@@ -15,33 +19,59 @@ pub struct DiffusionLimitedAggregationParams {
 }
 
 #[derive(Clone)]
-struct Point {
-    // pub attached: Vec<&Point>,
-    pub position: (u32, u32),
+pub struct Point {
+    pub x: u32,
+    pub y: u32,
+}
+
+#[derive(Clone)]
+pub struct Pixel {
+    pub attached: Vec<Point>,
+    pub point: Point,
     height: f32,
 }
 
 impl Point {
-    pub fn new(position: (u32, u32)) -> Self {
+    pub fn new(x: u32, y: u32) -> Self {
+        Self { x, y }
+    }
+
+    pub fn key(&self) -> (u32, u32) {
+        (self.x, self.y)
+    }
+}
+
+impl<'a, 'b> Add<&'b Point> for &'a Point {
+    type Output = Point;
+
+    fn add(self, other: &'b Point) -> Point {
+        Point {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+impl Pixel {
+    pub fn new(point: Point) -> Self {
         Self {
-            // attached: Vec::new(),
-            position: position,
+            attached: Vec::new(),
+            point,
             height: 0.0,
         }
     }
 
     pub fn attach(&mut self, point: &Point) {
-        // self.attached.push(point);
+        self.attached.push(point.clone());
+        self.height == 0.0;
     }
 
-    // pub fn height(&mut self, func: Fn(f32) -> f32) -> f32 {
-    //     // return 1 - (1 / (1 + self.attached.len())) + 1;
-    //     if self.height == 0.0 {
-    //         self.height = func(self.attached.len() + 1);
-    //     } else {
-    //     }
-    //     return self.height;
-    // }
+    pub fn height(&mut self) -> f32 {
+        if self.height == 0.0 {
+            self.height = inverse((self.attached.len() + 1) as f32);
+        }
+        return self.height;
+    }
 
     pub fn clear_height(&mut self) {
         self.height = 0.0;
@@ -49,157 +79,92 @@ impl Point {
 }
 
 pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
-    let mut map = vec![vec![0.0; params.width]; params.height];
     let mut img = RgbImage::new(params.width as u32, params.height as u32);
-    let mut point_map: HashMap<(u32, u32), Point> = HashMap::new();
+    let mut point_map: HashSet<(u32, u32)> = HashSet::with_capacity(params.particles as usize);
 
-    let d = min_max(params.density, 0.0, 1.0);
-    // for p in params.spawns {
-    //     if point_map.contains_key(&(p.x as u32, p.y as u32)) {
-    //     } else {
-    //         point_map.insert((p.x as u32, p.y as u32), Point::new(p));
-    //         img.put_pixel(p.x as u32, p.y as u32, Rgb([255, 255, 255]));
-    //     }
-    // }
+    // *   3   *
+    // 1   x   2
+    // *   0   *
+    let cords: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
+
     for p in params.spawns {
-        if point_map.contains_key(&(p.0 as u32, p.1 as u32)) {
+        if point_map.contains(&p.key()) {
         } else {
-            point_map.insert((p.0 as u32, p.1 as u32), Point::new(p));
-            img.put_pixel(p.0 as u32, p.1 as u32, Rgb([255, 255, 255]));
+            point_map.insert(p.key());
+            img.put_pixel(p.x as u32, p.y as u32, Rgb([255, 255, 255]));
         }
     }
 
     let mut rng = rand::thread_rng();
 
+    let bar = ProgressBar::new(params.particles as u64);
+    let style = ProgressStyle::with_template(
+        "{bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
+    )
+    .unwrap();
+    bar.set_style(style);
+
+    let mut current = Point::new(0, 0);
+
     for _ in 0..params.particles {
-        // determine border of aggregate and aggregate border limit
+        bar.inc(1);
 
-        // create a spawn point outside of the aggregate border plus scaler
-        // let current = Vec2::new(
-        //     rng.gen_range(0..params.width) as f32,
-        //     rng.gen_range(0..params.height) as f32,
-        // );
+        loop {
+            current = Point::new(
+                rng.gen_range(0..params.width) as u32,
+                rng.gen_range(0..params.height) as u32,
+            );
 
-        let mut current = (
-            rng.gen_range(0..params.width) as u32,
-            rng.gen_range(0..params.height) as u32,
-        );
-
-        // if (point_map.keys().len() as f32 / params.particles as f32) > d && d > 0.0 {
-        if false {
-            // density is high enough
-            return vec![vec![0.0; params.width]; params.height];
+            if point_map.contains(&current.key()) {
+            } else {
+                break;
+            }
         }
 
         loop {
-            // *   3   *
-            // 1   x   2
-            // *   0   *
-            let dir = rng.gen_range(0..4) as u32;
-            // let next: Vec2 = match dir {
-            //     0 => current + Vec2::new(0.0, -1.0),
-            //     1 => current + Vec2::new(-1.0, 0.0),
-            //     2 => current + Vec2::new(1.0, 0.0),
-            //     3 => current + Vec2::new(0.0, 1.0),
-            //     _ => Vec2::new(0.0, 0.0),
-            // };
-
-            let c: (i32, i32) = (current.0 as i32, current.1 as i32);
-            let next: (i32, i32) = match dir {
-                0 => (c.0 + 0, c.1 - 1),
-                1 => (c.0 - 1, c.1 + 0),
-                2 => (c.0 + 1, c.1 + 0),
-                3 => (c.0 + 0, c.1 + 1),
-                _ => c,
-            };
-            let next = (next.0 as u32, next.1 as u32);
-
-            // if (next.x < 0.0 || next.x >= params.width as f32)
-            //     || (next.y < 0.0 || next.y >= params.height as f32)
-            // {
-            //     continue;
-            // } else if point_map.contains_key(&(next.x as u32, next.y as u32)) {
-            //     continue;
-            // }
-            if (next.0 < 0 || next.0 >= params.width as u32)
-                || (next.1 < 0 || next.1 >= params.height as u32)
-            {
-                continue;
-            } else if point_map.contains_key(&(next.0 as u32, next.1 as u32)) {
-                continue;
-            }
-
-            // remove if particle is outside of border limit
-            if false {
-                break;
-            }
-
-            // move particle and check surroundings
-            current = next.clone();
-
-            // let positions = [
-            //     current + Vec2::new(0.0, -1.0),
-            //     current + Vec2::new(-1.0, 0.0),
-            //     current + Vec2::new(1.0, 0.0),
-            //     current + Vec2::new(0.0, 1.0),
-            // ];
-
-            let c: (i32, i32) = (current.0 as i32, current.1 as i32);
-            let positions = [
-                (c.0 + 0, c.1 - 1),
-                (c.0 - 1, c.1 + 0),
-                (c.0 + 1, c.1 + 0),
-                (c.0 + 0, c.1 + 1),
-            ];
-
+            // check for connections
+            let mut moves: Vec<Point> = Vec::with_capacity(cords.len());
             let mut p_cnt = 0;
-            for p in positions {
-                // if point_map.contains_key(&(p.x as u32, p.y as u32)) {
-                if point_map.contains_key(&(p.0 as u32, p.1 as u32)) {
-                    // println!("found ({}, {}) in keys", p.0, p.1);
-                    p_cnt = p_cnt + 1;
+
+            for c in cords {
+                let x = c.0 + current.x as i32;
+                let y = c.1 + current.y as i32;
+
+                if x >= 0 && x < params.width as i32 && y >= 0 && y < params.height as i32 {
+                    let p = Point::new(x as u32, y as u32);
+                    if point_map.contains(&p.key()) {
+                        p_cnt = p_cnt + 1;
+                    } else {
+                        moves.push(p);
+                    }
                 }
             }
 
-            if p_cnt == 0 {
-                continue;
-            }
-
-            let abs = absorbtion(params.t, p_cnt);
-            let chance = rand::random::<f32>();
-
-            if chance >= abs {
-                let p = Point::new(current);
-                // positions[0].attach(&p);
-                // img.put_pixel(
-                //     p.position.x as u32,
-                //     p.position.y as u32,
-                //     Rgb([255, 255, 255]),
-                // );
-                img.put_pixel(
-                    p.position.0 as u32,
-                    p.position.1 as u32,
-                    Rgb([255, 255, 255]),
-                );
-                // point_map.insert((p.position.x as u32, p.position.y as u32), p);
-                point_map.insert((p.position.0 as u32, p.position.1 as u32), p);
-                // println!("({}, {}) attached", current.0, current.1);
+            // insert if there is connection
+            if p_cnt > 0 {
+                point_map.insert(current.key());
                 break;
             }
+
+            // move
+            let pos = rng.gen_range(0..moves.len());
+            current = moves[pos].clone();
         }
     }
 
+    bar.finish();
+
+    println!("creating image");
+    for each in point_map {
+        img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
+    }
     let _ = img.save_with_format(
-        "/Users/nathankagi/dev/procedural-terrain/img.jpg",
+        "C:/projects/procedural-terrain/img.jpg",
         image::ImageFormat::Jpeg,
     );
 
     vec![vec![0.0; params.width]; params.height]
 }
-
-// fn upscale_points() {}
-
-// fn upscape_image() {}
 
 fn inverse(x: f32) -> f32 {
     1.0 - (1.0 / (1.0 + x))
@@ -208,10 +173,6 @@ fn inverse(x: f32) -> f32 {
 fn absorbtion(t: f32, b: u32) -> f32 {
     return min_max(t.powi((3 - b) as i32), 0.0, 1.0);
 }
-
-// fn filter(&map: Vec<Vec<f32>>) -> Vec<Vec<f32>> {
-//     let map_filt = vec![vec![0.0; map[0].len()]; map.len()];
-// }
 
 fn min_max(val: f32, min: f32, max: f32) -> f32 {
     return val.max(max).min(min);

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
+use bevy::render::RenderPlugin;
 use bevy::render::{
     mesh::{Indices, Mesh},
     render_asset::RenderAssetUsages,
@@ -11,8 +12,8 @@ use rayon::iter::{
 };
 
 use procedural_terrain::heightmap::HeightMap;
-use procedural_terrain::heightmap::{self, generate};
-use procedural_terrain::heightmaps::{self, dla};
+use procedural_terrain::heightmap::{self};
+use procedural_terrain::heightmaps::{self};
 use procedural_terrain::mesh::Meshable;
 use procedural_terrain::{noise, terrain};
 
@@ -27,14 +28,14 @@ struct Terrain {
 
 fn main() {
     App::new()
-        // .add_plugins(DefaultPlugins.set(RenderPlugin {
-        //     render_creation: RenderCreation::Automatic(WgpuSettings {
-        //         backends: Some(Backends::VULKAN),
-        //         ..default()
-        //     }),
-        //     ..default()
-        // }))
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(RenderPlugin {
+            render_creation: RenderCreation::Automatic(WgpuSettings {
+                backends: Some(Backends::VULKAN),
+                ..default()
+            }),
+            ..default()
+        }))
+        // .add_plugins(DefaultPlugins)
         .add_systems(Startup, (tests, setup, setup_lights, setup_ambient_light))
         // .add_systems(Update, (update_terrain))
         .run();
@@ -49,10 +50,9 @@ fn tests(
     let params = heightmaps::dla::DiffusionLimitedAggregationParams {
         height: 500,
         width: 500,
-        spawns: vec![(100, 100)],
-        // spawns: vec![Vec2::new(10.0, 10.0)],
+        spawns: vec![heightmaps::dla::Point::new(250, 250)],
         t: 1.0,
-        particles: 500,
+        particles: 10000,
         layers: 1,
         density: 1.0,
     };
