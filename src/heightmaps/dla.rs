@@ -63,7 +63,7 @@ impl Pixel {
 
     pub fn attach(&mut self, point: &Point) {
         self.attached.push(point.clone());
-        self.height == 0.0;
+        self.height = 0.0;
     }
 
     pub fn height(&mut self) -> f32 {
@@ -141,9 +141,19 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
             }
 
             // insert if there is connection
-            if p_cnt > 0 {
+            if p_cnt >= 3 {
                 point_map.insert(current.key());
                 break;
+            }
+
+            if p_cnt > 0 {
+                let absorbtion_prob = absorbtion(params.t, p_cnt);
+                let prob = rand::random::<f32>();
+                if prob <= absorbtion_prob {
+                    point_map.insert(current.key());
+                    break;
+                } else {
+                }
             }
 
             // move
@@ -171,9 +181,5 @@ fn inverse(x: f32) -> f32 {
 }
 
 fn absorbtion(t: f32, b: u32) -> f32 {
-    return min_max(t.powi((3 - b) as i32), 0.0, 1.0);
-}
-
-fn min_max(val: f32, min: f32, max: f32) -> f32 {
-    return val.max(max).min(min);
+    return t.powi((3 - b) as i32);
 }

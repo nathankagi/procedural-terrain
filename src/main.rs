@@ -50,9 +50,11 @@ fn tests(
     let params = heightmaps::dla::DiffusionLimitedAggregationParams {
         height: 500,
         width: 500,
-        spawns: vec![heightmaps::dla::Point::new(250, 250)],
-        t: 1.0,
-        particles: 10000,
+        spawns: vec![
+            heightmaps::dla::Point::new(250, 250),
+        ],
+        t: 0.6,
+        particles: 20000,
         layers: 1,
         density: 1.0,
     };

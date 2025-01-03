@@ -27,7 +27,7 @@ Some of the newer Bevy [custom meshing](https://bevyengine.org/examples/3D%20Ren
 
 Initially I used only verticle normals, trying to get the lighting (both ambient and directional) working with this setup led to some interesting looking shadow behaviour that made the terrain look very strange. To get rid of these stange shadows I actually calculated the normal vectors using an answer on [stack overflow](https://stackoverflow.com/questions/6656358/calculating-normals-in-a-triangle-mesh). The calculation simplifies to calculating the height differences between the adjacent row and column points and the output looked much nicer.
 
-![mesh_triangles](./resources/mesh_triangles.png "Triangle List Mesh")
+![mesh_triangles](./resources/triangle_mesh.png "Triangle List Mesh")
 
 There are still some issues with the lighting which become apparent on both very smooth and very hilly terrain. The smooth surfaces become very shiny and the sharper terrain becomes dull. This is due to the vertical scale factor in the normal vector calculation mentioned before.
 
@@ -37,7 +37,7 @@ let normal = Vector3::new(height_diff_x, 2.0, height_diff_z).normalize();
 
 Typically a value of 2 is suitable but in these extremes would need to be altered. Larger values are suited to flatter terrain keeping the normal vectors more vertical while smaller values are more suitable to more hilly terrain. This can be dynamically adjusted based on the height differentials but it isn't super necessary for this kind of simulation so I'll leave the value at 2 for now. It is also worth noting this seems more noticeable in the dimly lit scene I currently have, when increasing the light I found it much harder to notice.
 
-![triangle mesh light](./resources/mesh_triangles_light.png "Triangle List Mesh Lighter")
+![triangle mesh light](./resources/triangle_mesh_light.png "Triangle List Mesh Lighter")
 
 With some tweaking of the noise generation, some ambient and directional light I was able to get a nice wavy terrain using the following config:
 
@@ -192,7 +192,31 @@ pub fn generate(algorithm: Algorithms) -> HeightMap {
 }
 ```
 
+I attempted to implement the algorthm in a similar way to the original paper and ended up using this struct
 
+```rust
+#[derive(Clone)]
+pub struct DiffusionLimitedAggregationParams {
+    pub height: usize,
+    pub width: usize,
+    pub spawns: Vec<Point>,
+    pub t: f32, // absorbtion coefficient parameter
+    pub particles: u32,
+}
+```
+
+as the algorithm's parameters. After working out some improvements on the particle "walking", the results started to look pretty good. In addition I included the absorbption function that allows for thickening of the aggregate.
+
+```rust
+fn absorbtion(t: f32, b: u32) -> f32 {
+    return t.powi((3 - b) as i32);
+}
+```
+
+I attempted to add more spawn particles to see if I could bias the output, for some reason I found that this resulted in discrete aggregates that seemed to "avoid" the other aggregates. For now I will likely continue with only one point and get the rest of the algorithm before I find out why this is occuring. One thing to note, the new particle generation is purely random, this will bias the aggregate generation in some way. It is a technique to limit the generation areas to speed up the process or to create distinct features.
+
+![3-point DLA](./resources/dla_3_points.jpg "3-Point DLA")
+![multi-point DLA](./resources/dla_multi_points.jpg "Multi-Point DLA")
 
 ## Terrain Model
 

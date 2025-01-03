@@ -17,6 +17,7 @@ pub struct Material {
     cohesion: f32,
     saturation: f32,
     permeability: f32,
+    mass: f32,
 }
 
 #[derive(Copy, Clone)]
@@ -174,6 +175,7 @@ impl Default for Material {
             cohesion: 0.0,
             saturation: 0.0,
             permeability: 0.0,
+            mass: 0.0,
         }
     }
 }
