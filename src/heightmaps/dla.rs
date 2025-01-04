@@ -25,8 +25,8 @@ pub struct Point {
 }
 
 #[derive(Clone)]
-pub struct Particle <'a> {
-    pub linked: Vec<&'a Particle<'a>>,
+pub struct Particle {
+    pub linked: Vec<(u32, u32)>,
     pub point: Point,
     height: f32,
 }
@@ -41,7 +41,7 @@ impl Point {
     }
 }
 
-impl<'a> Particle<'a> {
+impl Particle {
     pub fn new(point: Point) -> Self {
         Self {
             linked: Vec::new(),
@@ -50,15 +50,17 @@ impl<'a> Particle<'a> {
         }
     }
 
-    pub fn link(&mut self, particle: &'a Particle<'a>) {
-        self.linked.push(particle);
+    pub fn link(&mut self, key: (u32, u32)) {
+        self.linked.push(key);
     }
 
-    pub fn height(&self) -> f32 {
+    pub fn height(&self, map: &HashMap<(u32, u32), Particle>) -> f32 {
         let mut m = 0.0;
         for a in self.linked.iter() {
-            if a.height() > m {
-                m = a.height();
+            if let Some(t) = map.get(a) {
+                if t.height(map) > m {
+                    m = t.height(map);
+                }
             }
         }
 
@@ -69,7 +71,8 @@ impl<'a> Particle<'a> {
 pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     let mut img = RgbImage::new(params.width as u32, params.height as u32);
     let mut point_set: HashSet<(u32, u32)> = HashSet::with_capacity(params.particles as usize);
-    let mut point_map: HashMap<(u32, u32), Particle> = HashMap::with_capacity(params.particles as usize);
+    let mut point_map: HashMap<(u32, u32), Particle> =
+        HashMap::with_capacity(params.particles as usize);
 
     // *   3   *
     // 1   x   2
@@ -133,10 +136,10 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
             // insert if there is connection
             if p_cnt >= 3 {
                 point_set.insert(current.key());
-                let mut new_particle: Particle<'_> = Particle::new(current.clone());
-                
-                if let Some(l) = point_map.get(&current.key()) {
-                    new_particle.link(l);
+
+                let new_particle: Particle = Particle::new(current.clone());
+                if let Some(l) = point_map.get_mut(&current.key()) {
+                    l.link(new_particle.point.key());
                 }
 
                 point_map.insert(new_particle.point.key(), new_particle);
@@ -148,6 +151,13 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
                 let prob = rand::random::<f32>();
                 if prob <= absorbtion_prob {
                     point_set.insert(current.key());
+
+                    let new_particle: Particle = Particle::new(current.clone());
+                    if let Some(l) = point_map.get_mut(&current.key()) {
+                        l.link(new_particle.point.key());
+                    }
+
+                    point_map.insert(new_particle.point.key(), new_particle);
                     break;
                 } else {
                 }

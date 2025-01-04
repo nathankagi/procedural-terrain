@@ -53,7 +53,7 @@ fn tests(
         spawns: vec![
             heightmaps::dla::Point::new(250, 250),
         ],
-        t: 0.6,
+        t: 1.0,
         particles: 20000,
         layers: 1,
         density: 1.0,
