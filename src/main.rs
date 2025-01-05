@@ -51,7 +51,7 @@ fn tests(
         height: 500,
         width: 500,
         spawns: vec![
-            heightmaps::dla::Point::new(250, 250),
+            heightmaps::dla::Point::new(50, 50),
         ],
         t: 1.0,
         particles: 20000,

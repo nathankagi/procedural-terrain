@@ -3,7 +3,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 
 use std::{
-    collections::{hash_map, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     ops::Add,
 };
 
@@ -18,7 +18,7 @@ pub struct DiffusionLimitedAggregationParams {
     pub density: f32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Point {
     pub x: u32,
     pub y: u32,
@@ -54,17 +54,35 @@ impl Particle {
         self.linked.push(key);
     }
 
+    // pub fn link_parent(&mut self, key: (u32, u32), map: &HashMap<(u32, u32), Particle>) {
+    //     self.linked.push(key);
+    //     self.height = 1.0;
+    //     if let Some(parent) = map.get_mut(&key) {
+    //         parent.set_height(self.height + 1.0, map);
+    //     }
+    // }
+
+    // pub fn set_height(&mut self, val: f32, map: &HashMap<(u32, u32), Particle>) {
+    //     if val > self.height {
+    //         self.height = val;
+    //         self.linked[0].set_height(self.height + 1.0, map);
+    //     }
+    // }
+
     pub fn height(&self, map: &HashMap<(u32, u32), Particle>) -> f32 {
         let mut m = 0.0;
-        for a in self.linked.iter() {
-            if let Some(t) = map.get(a) {
-                if t.height(map) > m {
-                    m = t.height(map);
+        for a in self.linked.clone() {
+            if let Some(t) = map.get(&a) {
+                let h = t.height(map); 
+                if h > m {
+                    m = h;
                 }
+            }
+            else {
             }
         }
 
-        return self.height;
+        return m + 1.0;
     }
 }
 
@@ -79,7 +97,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     // *   0   *
     let cords: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
 
-    for p in params.spawns {
+    for p in params.spawns.clone() {
         if point_set.contains(&p.key()) {
         } else {
             point_set.insert(p.key());
@@ -102,21 +120,23 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     for _ in 0..params.particles {
         bar.inc(1);
 
+        // create valid start point
         loop {
             current = Point::new(
                 rng.gen_range(0..params.width) as u32,
                 rng.gen_range(0..params.height) as u32,
             );
 
-            if point_set.contains(&current.key()) {
-            } else {
+            if !point_set.contains(&current.key()) {
                 break;
             }
         }
 
+        // walk
         loop {
             // check for connections
             let mut moves: Vec<Point> = Vec::with_capacity(cords.len());
+            let mut links: Vec<Point> = Vec::with_capacity(cords.len());
             let mut p_cnt = 0;
 
             for c in cords {
@@ -127,6 +147,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
                     let p = Point::new(x as u32, y as u32);
                     if point_set.contains(&p.key()) {
                         p_cnt = p_cnt + 1;
+                        links.push(p);
                     } else {
                         moves.push(p);
                     }
@@ -138,7 +159,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
                 point_set.insert(current.key());
 
                 let new_particle: Particle = Particle::new(current.clone());
-                if let Some(l) = point_map.get_mut(&current.key()) {
+                if let Some(l) = point_map.get_mut(&links[0].key()) {
                     l.link(new_particle.point.key());
                 }
 
@@ -153,7 +174,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
                     point_set.insert(current.key());
 
                     let new_particle: Particle = Particle::new(current.clone());
-                    if let Some(l) = point_map.get_mut(&current.key()) {
+                    if let Some(l) = point_map.get_mut(&links[0].key()) {
                         l.link(new_particle.point.key());
                     }
 
@@ -171,14 +192,36 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
 
     bar.finish();
 
+    let mut particle_heights: HashMap<(u32, u32), f32> = HashMap::with_capacity(point_map.len());
+
+    for (key, particle) in &point_map {
+        let calculated_height = particle.height(&point_map);
+        particle_heights.insert(*key, calculated_height);
+    }
+
+    for (key, particle) in &mut point_map {
+        if let Some(height) = particle_heights.get(key) {
+            // print!("particle ({}, {})", key.0, key.1);
+            // println!("  height is: {}", *height);
+            particle.height = *height;
+        }
+    }
+
+    println!("calculating height");
+    match point_map.get(&params.spawns[0].key()) {
+        Some(l) => println!("height of first spawn is: {}", l.height(&point_map)),
+        None => println!("nothing"),
+    }
+
     println!("creating image");
-    for each in point_set {
+    for each in point_set.iter() {
         img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
     }
     let _ = img.save_with_format(
         "C:/projects/procedural-terrain/img.jpg",
         image::ImageFormat::Jpeg,
     );
+
 
     vec![vec![0.0; params.width]; params.height]
 }
