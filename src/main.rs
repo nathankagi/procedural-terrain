@@ -48,13 +48,13 @@ fn tests(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let params = heightmaps::dla::DiffusionLimitedAggregationParams {
-        height: 500,
-        width: 500,
+        height: 200,
+        width: 200,
         spawns: vec![
-            heightmaps::dla::Point::new(50, 50),
+            heightmaps::dla::Point::new(100, 100),
         ],
         t: 1.0,
-        particles: 20000,
+        particles: 5000,
         layers: 1,
         density: 1.0,
     };
