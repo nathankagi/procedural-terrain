@@ -197,11 +197,13 @@ I attempted to implement the algorthm in a similar way to the original paper and
 ```rust
 #[derive(Clone)]
 pub struct DiffusionLimitedAggregationParams {
-    pub height: usize,
-    pub width: usize,
+    pub height: usize, // starting width
+    pub width: usize, // starting height
     pub spawns: Vec<Point>,
     pub t: f32, // absorbtion coefficient parameter
     pub particles: u32,
+    pub layers: u32, // number of layer scalings, each layer scales width/height by factor of 2
+    pub density: f32,
 }
 ```
 

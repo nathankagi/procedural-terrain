@@ -82,7 +82,7 @@ impl Particle {
     pub fn new(point: Point) -> Self {
         Self {
             linked: Vec::new(),
-            point,
+            point,  
         }
     }
 
@@ -112,9 +112,6 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     let scale_factor: u32 = 2;
 
     let mut point_map: HashMap<(u32, u32), Particle> = HashMap::with_capacity(params.particles as usize);
-
-    // let mut img = RgbImage::new(basae_width, base_height);
-    let mut img = RgbImage::new(params.width as u32 * 2_u32.pow(params.layers), params.height as u32 * 2_u32.pow(params.layers));
     let mut height_map: Vec<Vec<f32>> = vec![vec![0.0; params.width]; params.height];
 
     println!("Adding starting points to DLA image");
@@ -161,17 +158,18 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     // }
 
     for layer in 0..params.layers {
-        println!("populating layer {}/{}", layer, params.layers);
-
         let layer_params = DiffusionLimitedAggregationParams {
             height: params.height * 2_u32.pow(layer) as usize,
             width: params.width * 2_u32.pow(layer) as usize,
             spawns: params.spawns.clone(),
             t: params.t,
-            particles: params.particles * 2_u32.pow(layer),
+            // particles: params.particles * 2_u32.pow(2 * layer),
+            particles: (0.08 * params.height as f32 * 2_u32.pow(layer) as f32 * params.width as f32 * 2_u32.pow(layer) as f32) as u32,
             layers: params.layers,
             density: params.density,
         };
+
+        println!("populating layer {}/{} with dimensions {}x{}", layer, params.layers, layer_params.width, layer_params.height);
 
         let bar = ProgressBar::new(layer_params.particles as u64);
         let style = ProgressStyle::with_template(
@@ -186,47 +184,28 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
             bar.inc(1);
         }
 
-        point_map = scale_map(scale_factor, &point_map);
         bar.finish();
+
+        println!("creating image");
+        let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
+        for each in point_map.keys() {
+            img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
+        }
+        let name = format!("C:/projects/procedural-terrain/img_{}.jpg", layer);
+        let _ = img.save_with_format(
+            name,
+            image::ImageFormat::Jpeg,
+        );
+
+        if layer == (params.layers - 1) {
+            break;
+        }
+
+        println!("scaling map");
+        point_map = scale_map(scale_factor, &point_map);
     }
-
-    let layer = params.layers + 1;
-
-    let layer_params = DiffusionLimitedAggregationParams {
-        height: params.height * 2_u32.pow(layer - 1) as usize,
-        width: params.width * 2_u32.pow(layer - 1) as usize,
-        spawns: params.spawns.clone(),
-        t: params.t,
-        particles: 5000,
-        layers: params.layers,
-        density: params.density,
-    };
-
-    let bar = ProgressBar::new(layer_params.particles as u64);
-    let style = ProgressStyle::with_template(
-        "dla layer: {bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
-    )
-    .unwrap();
-    bar.set_style(style);
-
-    for _ in 0..layer_params.particles {
-        let pos = &random_particle(layer_params.height as u32, layer_params.width as u32, &point_map);
-        walk(pos, &layer_params, &mut point_map);
-        bar.inc(1);
-    }
-
-    bar.finish();
 
     println!("Complted final layer with {} particles", point_map.len());
-
-    println!("creating image");
-    for each in point_map.keys() {
-        img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
-    }
-    let _ = img.save_with_format(
-        "C:/projects/procedural-terrain/img.jpg",
-        image::ImageFormat::Jpeg,
-    );
 
     vec![vec![0.0; params.width]; params.height]
 }
@@ -255,7 +234,23 @@ fn scale_map(factor: u32, map: &HashMap<(u32, u32), Particle>) -> HashMap<(u32, 
         for link in particle.linked.clone() {
             let link_scaled = Point::new(link.0, link.1) * factor; // scale the linked particle
             let middle = mid(particle.point.key(), link); // find the mid point between particle and link
-            let mut mid_point = Point::new(middle.0, middle.1);
+
+            let x_diff: i32 = link_scaled.x as i32 - middle.0 as i32;
+            let y_diff: i32 = link_scaled.y as i32 - middle.1 as i32;
+
+            let mut x_move: i32 = 0;
+            let mut y_move: i32 = 0;
+            let mut rng = rand::thread_rng();
+            let num = rng.gen_range(0..3);
+
+            if x_diff == 0 {
+                x_move = num - 1;
+            }
+            if y_diff == 0 {
+                y_move = num - 1;
+            }
+
+            let mid_point = Point::new((middle.0 as i32 + x_move) as u32, (middle.1 as i32 + y_move) as u32);
 
             // TODO randomly shift the mid point by one position
 
