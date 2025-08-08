@@ -220,6 +220,8 @@ I attempted to add more spawn particles to see if I could bias the output, for s
 ![3-point DLA](./resources/dla_3_points.jpg "3-Point DLA")
 ![multi-point DLA](./resources/dla_multi_points.jpg "Multi-Point DLA")
 
+Adding a slight shift in the middle particle when scaling allows for a slightly more natural graph and produces the end result significantly faster than an brute-force DLA. One minor issue at this stage, with low absorbtion values, the particles tend to clump together, as expected. However once scaled this clumping tends to persist more around the ends of the graph. It seems that to produce more consistent graphs values of >0.7 should be use for the absorbtion. For now I'll start with the filtering stages.
+
 ## Terrain Model
 
 After ironing out some issues, I feel quite happy with the terrain generation. Erosion, typically using partical simulated erosion techniques, is a fairly simple technique for generating nice looking terrain from a baseline such as the perlin noise I have been generating or even to give additional detail to terrain generated with improved algorithms.

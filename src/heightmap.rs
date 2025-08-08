@@ -50,6 +50,7 @@ impl HeightMap {
     pub fn width(&self) -> usize {
         return self.map.len();
     }
+
     pub fn height(&self) -> usize {
         return self.map[0].len();
     }

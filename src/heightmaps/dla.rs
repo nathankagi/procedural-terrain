@@ -7,12 +7,23 @@ use std::ops::{Mul, Sub};
 #[derive(Clone)]
 pub struct DiffusionLimitedAggregationParams {
     pub height: usize, // starting width
-    pub width: usize, // starting height
+    pub width: usize,  // starting height
     pub spawns: Vec<Point>,
     pub t: f32, // absorbtion coefficient parameter
     pub particles: u32,
     pub layers: u32, // number of layer scalings, each layer scales width/height by factor of 2
     pub density: f32,
+}
+
+#[derive(Copy, Clone)]
+pub enum DiffusionLimitedAggregationMode {
+    Particle,
+    Image,
+}
+
+pub enum ParticleSpawnPattern {
+    Random,
+    Edge,
 }
 
 #[derive(Clone, Copy)]
@@ -77,12 +88,11 @@ impl Sub<Point> for Point {
     }
 }
 
-
 impl Particle {
     pub fn new(point: Point) -> Self {
         Self {
             linked: Vec::new(),
-            point,  
+            point,
         }
     }
 
@@ -107,11 +117,10 @@ impl Particle {
 }
 
 pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
-    // prepare
-    println!("Preparing DLA generation");
     let scale_factor: u32 = 2;
 
-    let mut point_map: HashMap<(u32, u32), Particle> = HashMap::with_capacity(params.particles as usize);
+    let mut point_map: HashMap<(u32, u32), Particle> =
+        HashMap::with_capacity(params.particles as usize);
     let mut height_map: Vec<Vec<f32>> = vec![vec![0.0; params.width]; params.height];
 
     println!("Adding starting points to DLA image");
@@ -122,41 +131,6 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         }
     }
 
-    // create particle map
-    // TODO need to look at how many particles to generate
-
-    // steps
-    // 1. upscale heightmap
-    // 2. upscale particle map
-    // 3. add detail to particle map
-    // 4. filter particle map
-    // 5. add filtered particle map to heightmap
-    // for _ in 0..params.layers {
-    //     // 1. upscale heightmap
-    //     let mut height_map = scale_heightmap(default_scale_factor, &height_map);
-
-    //     // 2. upscale particle map
-    //     let mut point_map: HashMap<(u32, u32), Particle> = scale_map(default_scale_factor, &point_map);
-
-    //     // 3. add detail to particle map
-    //     let particles = 10;
-    //     for _ in 0..particles {
-    //         let pos = random_particle(params.height as u32, params.width as u32, &point_map);
-    //         walk(&pos, &params, &mut point_map);
-    //     }
-
-    //     // 4. filter particle ma
-    //     let filterd = filter_map(&point_map);
-
-    //     // 5. add filtered particle map to heightmap
-    //     for (i, row) in height_map.iter_mut().enumerate() {
-    //         for (j, val) in row.iter_mut().enumerate() {
-    //             *val += filterd[i][j];
-    //         }
-    //     }
-
-    // }
-
     for layer in 0..params.layers {
         let layer_params = DiffusionLimitedAggregationParams {
             height: params.height * 2_u32.pow(layer) as usize,
@@ -164,12 +138,22 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
             spawns: params.spawns.clone(),
             t: params.t,
             // particles: params.particles * 2_u32.pow(2 * layer),
-            particles: (0.08 * params.height as f32 * 2_u32.pow(layer) as f32 * params.width as f32 * 2_u32.pow(layer) as f32) as u32,
+            particles: (0.08
+                * params.height as f32
+                * 2_u32.pow(layer) as f32
+                * params.width as f32
+                * 2_u32.pow(layer) as f32) as u32,
             layers: params.layers,
             density: params.density,
         };
 
-        println!("populating layer {}/{} with dimensions {}x{}", layer, params.layers, layer_params.width, layer_params.height);
+        println!(
+            "populating layer {}/{} with dimensions {}x{}",
+            layer + 1,
+            params.layers,
+            layer_params.width,
+            layer_params.height
+        );
 
         let bar = ProgressBar::new(layer_params.particles as u64);
         let style = ProgressStyle::with_template(
@@ -179,30 +163,30 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         bar.set_style(style);
 
         for _ in 0..layer_params.particles {
-            let pos = &random_particle(layer_params.height as u32, layer_params.width as u32, &point_map);
+            let pos = &random_particle(
+                layer_params.height as u32,
+                layer_params.width as u32,
+                &point_map,
+            );
             walk(pos, &layer_params, &mut point_map);
             bar.inc(1);
         }
 
         bar.finish();
 
-        println!("creating image");
-        let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
-        for each in point_map.keys() {
-            img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
-        }
-        let name = format!("C:/projects/procedural-terrain/img_{}.jpg", layer);
-        let _ = img.save_with_format(
-            name,
-            image::ImageFormat::Jpeg,
-        );
+        // println!("creating image");
+        // let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
+        // for each in point_map.keys() {
+        //     img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
+        // }
+        // let name = format!("./outputs/img_{}.jpg", layer);
+        // let _ = img.save_with_format(name, image::ImageFormat::Jpeg);
 
         if layer == (params.layers - 1) {
             break;
         }
 
-        println!("scaling map");
-        point_map = scale_map(scale_factor, &point_map);
+        point_map = scale_particle_map(scale_factor, &point_map);
     }
 
     println!("Complted final layer with {} particles", point_map.len());
@@ -210,7 +194,10 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     vec![vec![0.0; params.width]; params.height]
 }
 
-fn scale_map(factor: u32, map: &HashMap<(u32, u32), Particle>) -> HashMap<(u32, u32), Particle> {
+fn scale_particle_map(
+    factor: u32,
+    map: &HashMap<(u32, u32), Particle>,
+) -> HashMap<(u32, u32), Particle> {
     fn mid(a: (u32, u32), b: (u32, u32)) -> (u32, u32) {
         let x = a.0 as i32 * 2 - (a.0 as i32 - b.0 as i32);
         let y = a.1 as i32 * 2 - (a.1 as i32 - b.1 as i32);
@@ -218,8 +205,13 @@ fn scale_map(factor: u32, map: &HashMap<(u32, u32), Particle>) -> HashMap<(u32, 
         (x as u32, y as u32)
     }
 
-    fn scale_recursive(factor: u32, particle: &Particle, old_map: &HashMap<(u32, u32), Particle>, new_map: &mut HashMap<(u32, u32), Particle>, set: &mut HashSet<(u32, u32)>) {
-
+    fn scale_recursive(
+        factor: u32,
+        particle: &Particle,
+        old_map: &HashMap<(u32, u32), Particle>,
+        new_map: &mut HashMap<(u32, u32), Particle>,
+        set: &mut HashSet<(u32, u32)>,
+    ) {
         // particle already updated
         if set.contains(&particle.point.key()) {
             return;
@@ -227,7 +219,7 @@ fn scale_map(factor: u32, map: &HashMap<(u32, u32), Particle>) -> HashMap<(u32, 
 
         // scale the position of the current point
         let scaled_point = Point::new(particle.point.x, particle.point.y) * factor;
-        
+
         set.insert(particle.point.key()); // track old keys that have been updated
         let mut scaled_particle = Particle::new(scaled_point);
 
@@ -250,7 +242,10 @@ fn scale_map(factor: u32, map: &HashMap<(u32, u32), Particle>) -> HashMap<(u32, 
                 y_move = num - 1;
             }
 
-            let mid_point = Point::new((middle.0 as i32 + x_move) as u32, (middle.1 as i32 + y_move) as u32);
+            let mid_point = Point::new(
+                (middle.0 as i32 + x_move) as u32,
+                (middle.1 as i32 + y_move) as u32,
+            );
 
             // TODO randomly shift the mid point by one position
 
@@ -285,33 +280,33 @@ fn scale_map(factor: u32, map: &HashMap<(u32, u32), Particle>) -> HashMap<(u32, 
     return new_map;
 }
 
-fn scale_heightmap(factor: u32, map: &Vec<Vec<f32>>) -> Vec<Vec<f32>> {
-    vec![vec![0.0; 10]; 10]
-}
-
-fn filter_map(map: &HashMap<(u32, u32), Particle>) -> Vec<Vec<f32>> {
-    vec![vec![0.0; 10]; 10]
-}
-
 fn random_particle(height: u32, width: u32, map: &HashMap<(u32, u32), Particle>) -> Point {
     let mut rng = rand::thread_rng();
+    let spawn_mode = ParticleSpawnPattern::Random;
 
-    let mut i = 0;
-    loop {
-        let current = Point::new(
-            rng.gen_range(0..width) as u32,
-            rng.gen_range(0..height) as u32,
-        );
-
-        if !map.contains_key(&current.key()) {
-            return current;
+    match spawn_mode {
+        ParticleSpawnPattern::Edge => {
+            return Point::new(0, 0);
         }
+        ParticleSpawnPattern::Random => {
+            let mut i = 0;
+            loop {
+                let current = Point::new(
+                    rng.gen_range(0..width) as u32,
+                    rng.gen_range(0..height) as u32,
+                );
 
-        if i > 10000 {
-            println!("WARNING: new particle failed to find new spot");
-            return Point::new(0, 0)
+                if !map.contains_key(&current.key()) {
+                    return current;
+                }
+
+                if i > 10000 {
+                    println!("WARNING: new particle failed to find new spot");
+                    return Point::new(0, 0);
+                }
+                i = i + 1;
+            }
         }
-        i = i + 1;
     }
 }
 
@@ -380,168 +375,17 @@ fn walk(
         if moves.len() > 0 {
             let pos = rng.gen_range(0..moves.len());
             current = moves[pos].clone();
-        }
-        else {
-
-        }
-    }
-}
-
-pub fn g(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
-    let mut img = RgbImage::new(params.width as u32, params.height as u32);
-    let mut point_set: HashSet<(u32, u32)> = HashSet::with_capacity(params.particles as usize);
-    let mut point_map: HashMap<(u32, u32), Particle> =
-        HashMap::with_capacity(params.particles as usize);
-
-    // *   3   *
-    // 1   x   2
-    // *   0   *
-    let cords: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
-
-    for p in params.spawns.clone() {
-        if point_set.contains(&p.key()) {
         } else {
-            point_set.insert(p.key());
-            img.put_pixel(p.x as u32, p.y as u32, Rgb([255, 255, 255]));
-            point_map.insert(p.key(), Particle::new(p));
         }
     }
-
-    let mut rng = rand::thread_rng();
-
-    let bar = ProgressBar::new(params.particles as u64);
-    let style = ProgressStyle::with_template(
-        "{bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
-    )
-    .unwrap();
-    bar.set_style(style);
-
-    let mut current = Point::new(0, 0);
-
-    for _ in 0..params.particles {
-        bar.inc(1);
-
-        // create valid start point
-        loop {
-            current = Point::new(
-                rng.gen_range(0..params.width) as u32,
-                rng.gen_range(0..params.height) as u32,
-            );
-
-            if !point_set.contains(&current.key()) {
-                break;
-            }
-        }
-
-        // walk
-        loop {
-            // check for connections
-            let mut moves: Vec<Point> = Vec::with_capacity(cords.len());
-            let mut links: Vec<Point> = Vec::with_capacity(cords.len());
-            let mut p_cnt = 0;
-
-            for c in cords {
-                let x = c.0 + current.x as i32;
-                let y = c.1 + current.y as i32;
-
-                if x >= 0 && x < params.width as i32 && y >= 0 && y < params.height as i32 {
-                    let p = Point::new(x as u32, y as u32);
-                    if point_set.contains(&p.key()) {
-                        p_cnt = p_cnt + 1;
-                        links.push(p);
-                    } else {
-                        moves.push(p);
-                    }
-                }
-            }
-
-            // insert if there is connection
-            if p_cnt >= 3 {
-                point_set.insert(current.key());
-
-                let new_particle: Particle = Particle::new(current.clone());
-                if let Some(l) = point_map.get_mut(&links[0].key()) {
-                    l.link(new_particle.point.key());
-                }
-
-                point_map.insert(new_particle.point.key(), new_particle);
-                break;
-            }
-
-            if p_cnt > 0 {
-                let absorbtion_prob = absorbtion(params.t, p_cnt);
-                let prob = rand::random::<f32>();
-                if prob <= absorbtion_prob {
-                    point_set.insert(current.key());
-
-                    let new_particle: Particle = Particle::new(current.clone());
-                    if let Some(l) = point_map.get_mut(&links[0].key()) {
-                        l.link(new_particle.point.key());
-                    }
-
-                    point_map.insert(new_particle.point.key(), new_particle);
-                    break;
-                } else {
-                }
-            }
-
-            // move
-            let pos = rng.gen_range(0..moves.len());
-            current = moves[pos].clone();
-        }
-    }
-
-    bar.finish();
-
-    // let mut particle_heights: HashMap<(u32, u32), f32> = HashMap::with_capacity(point_map.len());
-
-    // for (key, particle) in &point_map {
-    //     let calculated_height = particle.height(&point_map);
-    //     // particle_heights.insert(*key, calculated_height);
-    // }
-
-    // for (key, particle) in &mut point_map {
-    //     if let Some(height) = particle_heights.get(key) {
-    //         particle.height = *height;
-    //     }
-    // }
-
-    match point_map.get(&params.spawns[0].key()) {
-        Some(l) => println!(
-            "height of first spawn is: {}",
-            inverse(l.height(&point_map))
-        ),
-        None => println!("nothing"),
-    }
-
-    println!("creating image");
-    for each in point_set.iter() {
-        img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
-    }
-    let _ = img.save_with_format(
-        "C:/projects/procedural-terrain/img.jpg",
-        image::ImageFormat::Jpeg,
-    );
-    
-    let scaled_map = scale_map(2, &point_map);
-    println!("point map size: {}", point_map.len());
-    println!("scaled map size: {}", scaled_map.len());
-
-    let mut scaled_img = RgbImage::new(2 * params.width as u32, 2 * params.height as u32);
-    println!("creating scaled image");
-    for each in scaled_map.keys() {
-        scaled_img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
-    }
-    let _ = scaled_img.save_with_format(
-        "C:/projects/procedural-terrain/scaled_img.jpg",
-        image::ImageFormat::Jpeg,
-    );
-
-    vec![vec![0.0; params.width]; params.height]
 }
 
-fn inverse(x: f32) -> f32 {
+fn gradient_growth_limited(x: f32) -> f32 {
     1.0 - (1.0 / (1.0 + x))
+}
+
+fn gradient_growth_linear(x: f32) -> f32 {
+    x
 }
 
 fn absorbtion(t: f32, b: u32) -> f32 {

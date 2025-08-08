@@ -30,14 +30,14 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(RenderPlugin {
             render_creation: RenderCreation::Automatic(WgpuSettings {
-                backends: Some(Backends::VULKAN),
+                // backends: Some(Backends::VULKAN),
                 ..default()
             }),
             ..default()
         }))
         // .add_plugins(DefaultPlugins)
         .add_systems(Startup, (tests, setup, setup_lights, setup_ambient_light))
-        // .add_systems(Update, (update_terrain))
+        .add_systems(Update, (update_terrain))
         .run();
 }
 
@@ -50,12 +50,10 @@ fn tests(
     let params = heightmaps::dla::DiffusionLimitedAggregationParams {
         height: 100,
         width: 100,
-        spawns: vec![
-            heightmaps::dla::Point::new(50, 50)
-        ],
-        t: 0.5,
+        spawns: vec![heightmaps::dla::Point::new(50, 50)],
+        t: 0.8,
         particles: 300,
-        layers: 3,
+        layers: 2,
         density: 1.0,
     };
 
