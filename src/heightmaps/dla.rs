@@ -1,7 +1,8 @@
-use image::{Rgb, RgbImage};
+use image::{GrayImage, ImageFormat, Luma, Rgb, RgbImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
+use std::f32::consts::PI;
 use std::ops::{Mul, Sub};
 
 #[derive(Clone)]
@@ -13,6 +14,21 @@ pub struct DiffusionLimitedAggregationParams {
     pub particles: u32,
     pub layers: u32, // number of layer scalings, each layer scales width/height by factor of 2
     pub density: f32,
+    pub kernel: Kernel,
+}
+
+#[derive(Copy, Clone)]
+pub struct Kernel {
+    pub size: usize,
+    pub value: f32,
+    pub k_type: KernelType,
+}
+
+#[derive(Copy, Clone)]
+pub enum KernelType {
+    Gaussian,
+    SingleValue,
+    Directional,
 }
 
 #[derive(Copy, Clone)]
@@ -116,12 +132,79 @@ impl Particle {
     }
 }
 
+impl Kernel {
+    fn to_vec(&self) -> Vec<Vec<f32>> {
+        assert!(self.size % 2 == 1, "Kernel size must be odd");
+
+        match self.k_type {
+            KernelType::SingleValue => {
+                vec![vec![self.value; self.size]; self.size]
+            }
+
+            KernelType::Gaussian => {
+                let mut kernel = vec![vec![0.0; self.size]; self.size];
+                let mut sum = 0.0;
+                let center = (self.size / 2) as isize;
+
+                for y in 0..self.size {
+                    for x in 0..self.size {
+                        let dx = x as isize - center;
+                        let dy = y as isize - center;
+                        let exponent =
+                            -((dx * dx + dy * dy) as f32) / (2.0 * self.value * self.value);
+                        let value =
+                            (1.0 / (2.0 * PI * self.value * self.value)) * f32::exp(exponent);
+                        kernel[y][x] = value;
+                        sum += value;
+                    }
+                }
+
+                for row in &mut kernel {
+                    for v in row.iter_mut() {
+                        *v /= sum;
+                    }
+                }
+
+                kernel
+            }
+
+            KernelType::Directional => {
+                let mut kernel = vec![vec![0.0; self.size]; self.size];
+                let center = (self.size / 2) as isize;
+
+                let angle_rad = self.value.to_radians();
+                let dir_x = angle_rad.cos();
+                let dir_y = angle_rad.sin();
+
+                for y in 0..self.size {
+                    for x in 0..self.size {
+                        let dx = x as isize - center;
+                        let dy = y as isize - center;
+
+                        let proj = dx as f32 * dir_x + dy as f32 * dir_y;
+
+                        if proj.abs() < 1e-6 {
+                            kernel[y][x] = 0.0;
+                        } else if proj < 0.0 {
+                            kernel[y][x] = -1.0;
+                        } else {
+                            kernel[y][x] = 1.0;
+                        }
+                    }
+                }
+
+                kernel
+            }
+        }
+    }
+}
+
 pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     let scale_factor: u32 = 2;
 
     let mut point_map: HashMap<(u32, u32), Particle> =
         HashMap::with_capacity(params.particles as usize);
-    let mut height_map: Vec<Vec<f32>> = vec![vec![0.0; params.width]; params.height];
+    let mut height_map: Vec<Vec<f32>> = vec![vec![1.0; params.width]; params.height];
 
     println!("Adding starting points to DLA image");
     for p in params.spawns.clone() {
@@ -131,7 +214,89 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         }
     }
 
-    for layer in 0..params.layers {
+    let layer = 0;
+    let layer_params = DiffusionLimitedAggregationParams {
+        height: params.height * 2_u32.pow(layer) as usize,
+        width: params.width * 2_u32.pow(layer) as usize,
+        spawns: params.spawns.clone(),
+        t: params.t,
+        // particles: params.particles * 2_u32.pow(2 * layer),
+        particles: (0.08
+            * params.height as f32
+            * 2_u32.pow(layer) as f32
+            * params.width as f32
+            * 2_u32.pow(layer) as f32) as u32,
+        layers: params.layers,
+        density: params.density,
+        kernel: params.kernel,
+    };
+
+    println!(
+        "populating layer {}/{} with dimensions {}x{}",
+        layer + 1,
+        params.layers,
+        layer_params.width,
+        layer_params.height
+    );
+
+    let bar = ProgressBar::new(layer_params.particles as u64);
+    let style = ProgressStyle::with_template(
+        "dla layer: {bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
+    )
+    .unwrap();
+    bar.set_style(style);
+
+    for _ in 0..layer_params.particles {
+        let pos = &random_particle(
+            layer_params.height as u32,
+            layer_params.width as u32,
+            &point_map,
+        );
+        walk(pos, &layer_params, &mut point_map);
+        bar.inc(1);
+    }
+
+    bar.finish();
+
+    println!("saving layer image");
+    let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
+    for each in point_map.keys() {
+        img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
+    }
+    let name = format!("./outputs/layer_{}_particle.jpg", 0);
+    let _ = img.save_with_format(name, image::ImageFormat::Jpeg);
+
+    // ========== heightmap from particle map  ==========
+    for each in point_map.values() {
+        height_map[each.point.y as usize][each.point.x as usize] = height_map
+            [each.point.y as usize][each.point.x as usize]
+            + gradient_growth_limited(each.height(&point_map));
+    }
+
+    let name = format!("./outputs/layer_{}_heightmap.jpg", layer);
+    save_heightmpa_as_jpg(&height_map, &name);
+
+    for layer in 1..params.layers {
+        // ========== scale heightmap ==========
+        println!("scaling heightmap layer {}", layer);
+        height_map = scale_heightmap(&height_map);
+        let mut layer_kernel = params.kernel.clone();
+        layer_kernel.size = (params.kernel.size as f32 * 2_u32.pow(layer) as f32 / 10.0) as usize;
+        if layer_kernel.size % 2 == 0 {
+            layer_kernel.size = layer_kernel.size + 1;
+        }
+        println!("{} kernel size {}", layer, layer_kernel.size);
+        println!("{} kernel value {}", layer, layer_kernel.value);
+        height_map = filter_heightmap(height_map, layer_kernel.to_vec());
+        let name = format!("./outputs/layer_{}_heightmap_base.jpg", layer);
+        save_heightmpa_as_jpg(&height_map, &name);
+
+        // ========== scale particle map ==========
+        println!("scaling particle map");
+        point_map = scale_particle_map(scale_factor, &point_map);
+
+        // ========== add to particle map ==========
+        println!("adding to particle map");
         let layer_params = DiffusionLimitedAggregationParams {
             height: params.height * 2_u32.pow(layer) as usize,
             width: params.width * 2_u32.pow(layer) as usize,
@@ -145,6 +310,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
                 * 2_u32.pow(layer) as f32) as u32,
             layers: params.layers,
             density: params.density,
+            kernel: params.kernel,
         };
 
         println!(
@@ -174,24 +340,68 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
 
         bar.finish();
 
-        // println!("creating image");
-        // let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
-        // for each in point_map.keys() {
-        //     img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
-        // }
-        // let name = format!("./outputs/img_{}.jpg", layer);
-        // let _ = img.save_with_format(name, image::ImageFormat::Jpeg);
+        // ========== add particle map to heightmap ==========
+        println!("adding to heightmap");
+        for each in point_map.values() {
+            let h = gradient_growth_limited(each.height(&point_map));
+            height_map[each.point.y as usize][each.point.x as usize] =
+                height_map[each.point.y as usize][each.point.x as usize] + h;
+        }
+
+        // ========== save images ==========
+        println!("saving layer image");
+        let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
+        for each in point_map.keys() {
+            img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
+        }
+        let name = format!("./outputs/layer_{}_particle.jpg", layer);
+        let _ = img.save_with_format(name, image::ImageFormat::Jpeg);
+
+        let name = format!("./outputs/layer_{}_heightmap_detailed.jpg", layer);
+        save_heightmpa_as_jpg(&height_map, &name);
 
         if layer == (params.layers - 1) {
             break;
         }
-
-        point_map = scale_particle_map(scale_factor, &point_map);
     }
 
-    println!("Complted final layer with {} particles", point_map.len());
+    println!("Saving final heightmap");
+    height_map = scale_heightmap(&height_map);
+    let mut layer_kernel = params.kernel.clone();
+    layer_kernel.size = (params.height as f32 * 2_u32.pow(params.layers) as f32 / 20.0) as usize;
+    if layer_kernel.size % 2 == 0 {
+        layer_kernel.size = layer_kernel.size + 1;
+    }
+    println!("final kernel size {}", layer_kernel.size);
+    println!("final kernel value {}", layer_kernel.value);
+    height_map = filter_heightmap(height_map, layer_kernel.to_vec());
+    save_heightmpa_as_jpg(&height_map, "./outputs/final.jpg");
 
-    vec![vec![0.0; params.width]; params.height]
+    let height_map_scale = 50.0;
+    for row in height_map.iter_mut() {
+        for val in row.iter_mut() {
+            *val *= height_map_scale;
+        }
+    }
+    height_map
+}
+
+fn scale_heightmap(input: &Vec<Vec<f32>>) -> Vec<Vec<f32>> {
+    let height = input.len();
+    let width = input[0].len();
+    let mut output = vec![vec![0.0; width * 2]; height * 2];
+
+    for y in 0..height {
+        for x in 0..width {
+            let val = input[y][x];
+            output[y * 2][x * 2] = val;
+            output[y * 2][x * 2 + 1] = val;
+            output[y * 2 + 1][x * 2] = val;
+            output[y * 2 + 1][x * 2 + 1] = val;
+        }
+    }
+
+    output
 }
 
 fn scale_particle_map(
@@ -232,22 +442,20 @@ fn scale_particle_map(
 
             let mut x_move: i32 = 0;
             let mut y_move: i32 = 0;
-            let mut rng = rand::thread_rng();
-            let num = rng.gen_range(0..3);
+            // let mut rng = rand::thread_rng();
+            // let num = rng.gen_range(0..3);
 
-            if x_diff == 0 {
-                x_move = num - 1;
-            }
-            if y_diff == 0 {
-                y_move = num - 1;
-            }
+            // if x_diff == 0 {
+            //     x_move = num - 1;
+            // }
+            // if y_diff == 0 {
+            //     y_move = num - 1;
+            // }
 
             let mid_point = Point::new(
                 (middle.0 as i32 + x_move) as u32,
                 (middle.1 as i32 + y_move) as u32,
             );
-
-            // TODO randomly shift the mid point by one position
 
             let mut mid_particle = Particle::new(mid_point); // create mid point particle
             mid_particle.link(link_scaled.key()); // link scaled link to mid particle
@@ -380,6 +588,33 @@ fn walk(
     }
 }
 
+fn filter_heightmap(input: Vec<Vec<f32>>, kernel: Vec<Vec<f32>>) -> Vec<Vec<f32>> {
+    let height = input.len();
+    let width = input[0].len();
+    let k = kernel.len();
+    let offset = k / 2;
+
+    let mut output = vec![vec![0.0; width]; height];
+
+    for y in 0..height {
+        for x in 0..width {
+            let mut sum = 0.0;
+            for ky in 0..k {
+                for kx in 0..k {
+                    let iy = y as isize + ky as isize - offset as isize;
+                    let ix = x as isize + kx as isize - offset as isize;
+                    if iy >= 0 && iy < height as isize && ix >= 0 && ix < width as isize {
+                        sum += input[iy as usize][ix as usize] * kernel[ky][kx];
+                    }
+                }
+            }
+            output[y][x] = sum;
+        }
+    }
+
+    output
+}
+
 fn gradient_growth_limited(x: f32) -> f32 {
     1.0 - (1.0 / (1.0 + x))
 }
@@ -388,6 +623,47 @@ fn gradient_growth_linear(x: f32) -> f32 {
     x
 }
 
+fn gradient_growth_ln(x: f32) -> f32 {
+    x.ln()
+}
+
 fn absorbtion(t: f32, b: u32) -> f32 {
     return t.powi((3 - b) as i32);
+}
+
+fn save_heightmpa_as_jpg(height_map: &Vec<Vec<f32>>, filename: &str) {
+    let height = height_map.len();
+    let width = height_map[0].len();
+
+    let mut min_val = f32::MAX;
+    let mut max_val = f32::MIN;
+
+    for row in height_map {
+        for &val in row {
+            if val < min_val {
+                min_val = val;
+            }
+            if val > max_val {
+                max_val = val;
+            }
+        }
+    }
+
+    let range = if (max_val - min_val).abs() < std::f32::EPSILON {
+        1.0
+    } else {
+        max_val - min_val
+    };
+
+    let mut img = GrayImage::new(width as u32, height as u32);
+
+    for (y, row) in height_map.iter().enumerate() {
+        for (x, &val) in row.iter().enumerate() {
+            let norm = (val - min_val) / range;
+            let pixel_value = (norm * 255.0).round() as u8;
+            img.put_pixel(x as u32, y as u32, Luma([pixel_value]));
+        }
+    }
+
+    let _ = img.save_with_format(filename, image::ImageFormat::Jpeg);
 }

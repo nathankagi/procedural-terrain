@@ -13,16 +13,16 @@ use rayon::iter::{
 
 use procedural_terrain::heightmap::HeightMap;
 use procedural_terrain::heightmap::{self};
-use procedural_terrain::heightmaps::{self};
+use procedural_terrain::heightmaps::{self, dla};
 use procedural_terrain::mesh::Meshable;
 use procedural_terrain::{noise, terrain};
 
 #[derive(Component)]
 struct Terrain {
     size: usize,
-    octaves: i32,
-    persistence: f32,
-    permutation: Vec<i32>,
+    // octaves: i32,
+    // persistence: f32,
+    // permutation: Vec<i32>,
     mesh_handle: Handle<Mesh>,
 }
 
@@ -36,8 +36,8 @@ fn main() {
             ..default()
         }))
         // .add_plugins(DefaultPlugins)
-        .add_systems(Startup, (tests, setup, setup_lights, setup_ambient_light))
-        .add_systems(Update, (update_terrain))
+        .add_systems(Startup, (setup, setup_lights, setup_ambient_light))
+        // .add_systems(Update, (update_terrain))
         .run();
 }
 
@@ -47,17 +47,49 @@ fn tests(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let params = heightmaps::dla::DiffusionLimitedAggregationParams {
-        height: 100,
-        width: 100,
-        spawns: vec![heightmaps::dla::Point::new(50, 50)],
-        t: 0.8,
-        particles: 300,
-        layers: 2,
-        density: 1.0,
-    };
+    // let params = heightmaps::dla::DiffusionLimitedAggregationParams {
+    //     height: 10,
+    //     width: 10,
+    //     spawns: vec![heightmaps::dla::Point::new(5, 5)],
+    //     t: 0.1,
+    //     particles: 70,
+    //     layers: 8,
+    //     density: 1.0,
+    //     kernel: heightmaps::dla::Kernel {
+    //         size: 51,
+    //         value: 4.0,
+    //         k_type: heightmaps::dla::KernelType::Gaussian,
+    //     },
+    // };
 
-    let map = heightmaps::dla::generate(params);
+    // let map = heightmaps::dla::generate(params);
+
+    // let heightmap = heightmap::HeightMap::load(&map);
+
+    // let meshed = heightmap.mesh_triangles();
+
+    // let mesh = Mesh::new(
+    //     PrimitiveTopology::TriangleList,
+    //     RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    // )
+    // .with_inserted_indices(Indices::U32(meshed.indices))
+    // .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, meshed.vertices)
+    // .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, meshed.normals)
+    // .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, meshed.uvs);
+
+    // let mesh_handle = meshes.add(mesh);
+
+    // commands.spawn(PbrBundle {
+    //     // mesh: meshes.add(mesh_handle),
+    //     mesh: mesh_handle,
+    //     material: materials.add(StandardMaterial {
+    //         base_color: Color::GRAY,
+    //         perceptual_roughness: 1.0,
+    //         ..Default::default()
+    //     }),
+    //     transform: Transform::from_xyz(0.0, 0.0, 0.0),
+    //     ..Default::default()
+    // });
 }
 
 fn setup(
@@ -86,17 +118,35 @@ fn setup(
     });
 
     // Terrain Mesh
-    let params = heightmap::FractalPerlinParams {
-        height: size,
-        width: size,
-        scale: size as f32,
-        octaves: 7,
-        persistence: 0.5,
-        seed: seed,
+    // let params = heightmap::FractalPerlinParams {
+    //     height: size,
+    //     width: size,
+    //     scale: size as f32,
+    //     octaves: 7,
+    //     persistence: 0.5,
+    //     seed: seed,
+    // };
+
+    // let heightmap = heightmap::generate(heightmap::Algorithms::FractalPerlin(params.clone()));
+    // let mut terrain = terrain::Terrain::new(size, size);
+
+    let params = heightmaps::dla::DiffusionLimitedAggregationParams {
+        height: 8,
+        width: 8,
+        spawns: vec![heightmaps::dla::Point::new(4, 4)],
+        t: 0.4,
+        particles: 40,
+        layers: 6,
+        density: 1.0,
+        kernel: heightmaps::dla::Kernel {
+            size: 3,
+            value: 20.0,
+            k_type: heightmaps::dla::KernelType::Gaussian,
+        },
     };
 
-    let heightmap = heightmap::generate(heightmap::Algorithms::FractalPerlin(params.clone()));
-    // let mut terrain = terrain::Terrain::new(size, size);
+    let _map = dla::generate(params);
+    let heightmap = heightmap::HeightMap { map: _map };
 
     let meshed = heightmap.mesh_triangles();
 
@@ -114,9 +164,9 @@ fn setup(
     commands.spawn(
         (Terrain {
             size: size,
-            octaves: params.octaves,
-            persistence: params.persistence,
-            permutation: permutation.clone(),
+            // octaves: params.octaves,
+            // persistence: params.persistence,
+            // permutation: permutation.clone(),
             mesh_handle: mesh_handle.clone(),
         }),
     );
@@ -167,42 +217,42 @@ fn setup_lights(mut commands: Commands) {
 }
 
 // Update functions
-fn update_terrain(
-    time: Res<Time>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut query: Query<&mut Terrain>,
-) {
-    for terrain in query.iter_mut() {
-        if let Some(mesh) = meshes.get_mut(terrain.mesh_handle.clone()) {
-            let mut heightmap = HeightMap::new(terrain.size, terrain.size);
-            let z = time.elapsed_seconds() / 100.0;
+// fn update_terrain(
+//     time: Res<Time>,
+//     mut meshes: ResMut<Assets<Mesh>>,
+//     mut query: Query<&mut Terrain>,
+// ) {
+//     for terrain in query.iter_mut() {
+//         if let Some(mesh) = meshes.get_mut(terrain.mesh_handle.clone()) {
+//             let mut heightmap = HeightMap::new(terrain.size, terrain.size);
+//             let z = time.elapsed_seconds() / 100.0;
 
-            let height = terrain.size;
-            let width = terrain.size;
-            let scale = terrain.size as f32;
+//             let height = terrain.size;
+//             let width = terrain.size;
+//             let scale = terrain.size as f32;
 
-            heightmap
-                .map
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(i, row)| {
-                    row.iter_mut().enumerate().for_each(|(j, elem)| {
-                        *elem = noise::octave_perlin3d(
-                            i as f32 / height as f32,
-                            j as f32 / width as f32,
-                            z,
-                            terrain.octaves,
-                            terrain.persistence,
-                            &terrain.permutation,
-                        ) as f32
-                            * scale;
-                    });
-                });
+//             heightmap
+//                 .map
+//                 .par_iter_mut()
+//                 .enumerate()
+//                 .for_each(|(i, row)| {
+//                     row.iter_mut().enumerate().for_each(|(j, elem)| {
+//                         *elem = noise::octave_perlin3d(
+//                             i as f32 / height as f32,
+//                             j as f32 / width as f32,
+//                             z,
+//                             terrain.octaves,
+//                             terrain.persistence,
+//                             &terrain.permutation,
+//                         ) as f32
+//                             * scale;
+//                     });
+//                 });
 
-            let meshed = heightmap.mesh_triangles();
+//             let meshed = heightmap.mesh_triangles();
 
-            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, meshed.vertices);
-            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, meshed.normals);
-        }
-    }
-}
+//             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, meshed.vertices);
+//             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, meshed.normals);
+//         }
+//     }
+// }
