@@ -97,11 +97,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Params
     let size = 1000;
-    let mut rng = rand::thread_rng();
-    let seed = rng.gen::<u32>();
-    let permutation = noise::generate_permutation(seed);
 
     // Camera
     commands.spawn(Camera3dBundle {
@@ -118,35 +114,41 @@ fn setup(
     });
 
     // Terrain Mesh
-    // let params = heightmap::FractalPerlinParams {
-    //     height: size,
-    //     width: size,
-    //     scale: size as f32,
-    //     octaves: 7,
-    //     persistence: 0.5,
-    //     seed: seed,
-    // };
 
-    // let heightmap = heightmap::generate(heightmap::Algorithms::FractalPerlin(params.clone()));
     // let mut terrain = terrain::Terrain::new(size, size);
 
     let params = heightmaps::dla::DiffusionLimitedAggregationParams {
-        height: 8,
-        width: 8,
-        spawns: vec![heightmaps::dla::Point::new(4, 4)],
-        t: 0.4,
-        particles: 40,
-        layers: 6,
+        height: 4,
+        width: 4,
+        spawns: vec![heightmaps::dla::Point::new(2, 2)],
+        t: 0.5,
+        particles: 5,
+        layers: 8,
         density: 1.0,
         kernel: heightmaps::dla::Kernel {
             size: 3,
-            value: 20.0,
+            value: 10.0,
             k_type: heightmaps::dla::KernelType::Gaussian,
         },
     };
 
     let _map = dla::generate(params);
-    let heightmap = heightmap::HeightMap { map: _map };
+    let dla_heightmap = heightmap::HeightMap { map: _map };
+
+    let mut rng = rand::thread_rng();
+    let seed = rng.gen::<u32>();
+    let params = heightmap::FractalPerlinParams {
+        height: dla_heightmap.height(),
+        width: dla_heightmap.width(),
+        scale: 100.0,
+        octaves: 12,
+        persistence: 0.5,
+        seed: seed,
+    };
+
+    let p_heightmap = heightmap::generate(heightmap::Algorithms::FractalPerlin(params.clone()));
+    let heightmap = dla_heightmap + p_heightmap;
+    // let heightmap = dla_heightmap;
 
     let meshed = heightmap.mesh_triangles();
 

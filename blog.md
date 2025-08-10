@@ -113,7 +113,7 @@ pub fn octave_perlin3d(
 ) -> f32
 ```
 
-the `octave_perlin3d` function increased above some threshold. The threshold itself, for my initial settings was 2.0. Diving deeper I discovered that this value changed as the octaves changed, due to the adjusted x, y and z values of the perlin3d function being above 255. It came down to using the _x, _y and _z values as shown below.
+the `octave_perlin3d` function increased above some threshold. The threshold itself, for my initial settings was 2.0. Diving deeper I discovered that this value changed as the octaves changed, due to the adjusted x, y and z values of the perlin3d function being above 255. It came down to using the \_x, \_y and \_z values as shown below.
 
 ```rust
 fn perlin3d(x: f32, y: f32, z: f32, p: &Vec<i32>) -> f32 {
@@ -168,7 +168,7 @@ While Perlin noise can create some nice starting points, before I start with ero
 - [The Synthesis and Rendering of Eroded Fractal Terrains](https://history.siggraph.org/learning/the-synthesis-and-rendering-of-eroded-fractal-terrains-by-musgrave-kolb-and-mace/)
 - [Realtime Procedural Terrain Generation](http://web.mit.edu/cesium/Public/terrain.pdf)
 
-amongst many others. I found [this](https://www.cs.cmu.edu/~112-n23/notes/student-tp-guides/Terrain.pdf) article to be an interesting overview of various techniques used and a good introduction I wish I had found earlier. Eventually I stumbled upon [Josh's Channel](https://www.youtube.com/watch?v=gsJHzBTPG0Y) discussing exactly the topic I was interested in. I found [Diffusion-limited Aggregation](https://pmc.polytechnique.fr/pagesperso/dg/cours/biblio/PRB%2027,%205686%20(1983)%20Witten,%20Sander%20%5BDiffusion-limited%20aggregation%5D.pdf) (DLA) to be an interesting and very appealing option for an improved algorithm, epecially after reading through the original publication.
+amongst many others. I found [this](https://www.cs.cmu.edu/~112-n23/notes/student-tp-guides/Terrain.pdf) article to be an interesting overview of various techniques used and a good introduction I wish I had found earlier. Eventually I stumbled upon [Josh's Channel](https://www.youtube.com/watch?v=gsJHzBTPG0Y) discussing exactly the topic I was interested in. I found [Diffusion-limited Aggregation](<https://pmc.polytechnique.fr/pagesperso/dg/cours/biblio/PRB%2027,%205686%20(1983)%20Witten,%20Sander%20%5BDiffusion-limited%20aggregation%5D.pdf>) (DLA) to be an interesting and very appealing option for an improved algorithm, epecially after reading through the original publication.
 
 See [Directed Diffusion-limited Aggregation](https://alea.impa.br/articles/v14/14-15.pdf) (DDLA) for an extension.
 
@@ -192,22 +192,13 @@ pub fn generate(algorithm: Algorithms) -> HeightMap {
 }
 ```
 
-I attempted to implement the algorthm in a similar way to the original paper and ended up using this struct
+### DLA
 
-```rust
-#[derive(Clone)]
-pub struct DiffusionLimitedAggregationParams {
-    pub height: usize, // starting width
-    pub width: usize, // starting height
-    pub spawns: Vec<Point>,
-    pub t: f32, // absorbtion coefficient parameter
-    pub particles: u32,
-    pub layers: u32, // number of layer scalings, each layer scales width/height by factor of 2
-    pub density: f32,
-}
-```
+#### Points
 
-as the algorithm's parameters. After working out some improvements on the particle "walking", the results started to look pretty good. In addition I included the absorbption function that allows for thickening of the aggregate.
+In simple terms, DLA places at least a one starting point on a grid, then spawns and moves a particle around the grid until it is next to an existing particle. It then stops and a new particle is spawned, and so on. Fundamentally it is quite a simple algorith that produces some pretty cool features! One thing I have noticed, at least in my implementation, is that there is a fine line between awesome terrain and garbage when tweaking parameters.
+
+There are many possible additions to this base level of the algirthm to influence how the tree develops. Particle "stickyness" is a probability of a particle sticking when it encounters an existing one. Lower probabilities cause more dense trees. I'm using an absorbtion equation from [Josh](https://www.youtube.com/watch?v=gsJHzBTPG0Y).
 
 ```rust
 fn absorbtion(t: f32, b: u32) -> f32 {
@@ -215,18 +206,106 @@ fn absorbtion(t: f32, b: u32) -> f32 {
 }
 ```
 
-I attempted to add more spawn particles to see if I could bias the output, for some reason I found that this resulted in discrete aggregates that seemed to "avoid" the other aggregates. For now I will likely continue with only one point and get the rest of the algorithm before I find out why this is occuring. One thing to note, the new particle generation is purely random, this will bias the aggregate generation in some way. It is a technique to limit the generation areas to speed up the process or to create distinct features.
+Extra initial particles can be used to start clusters in multiple locations and even complex shapes can be used to author more distinct terrain.
 
 ![3-point DLA](./resources/dla_3_points.jpg "3-Point DLA")
 ![multi-point DLA](./resources/dla_multi_points.jpg "Multi-Point DLA")
 
-Adding a slight shift in the middle particle when scaling allows for a slightly more natural graph and produces the end result significantly faster than an brute-force DLA. One minor issue at this stage, with low absorbtion values, the particles tend to clump together, as expected. However once scaled this clumping tends to persist more around the ends of the graph. It seems that to produce more consistent graphs values of >0.7 should be use for the absorbtion. For now I'll start with the filtering stages.
+I've found the clusters seem to avoid each other for some reason.
+
+Particle spawn behaviour also plays a large part in the overal shape. I'm only picking a random point on the grid but limiting the particle spawns to particular regions is also a useful technique.
+
+#### Heightmaps
+
+The next stage of DLA is making a heightmap from these "point trees". The height The algorithm itself is as follows:
+
+- Create a base point map
+- Repeat the following for x layers
+  - Scale the heightmap
+  - Filter the heightmaps
+  - Scale the pointmap
+  - Add detail to the pointmap
+  - Add detailed pointmap to heightmap
+- Apply last filtering stages
+
+Firstly, to determine what the height of each particle is, when a particle attaches to another particle we keep track of which particle attached to other particles. The height is the based on the height of the largest attached particle +1. To keep track of particles and their connections I used a hashmap to keep all the particles and I have a struct with a function to calculate the height based on the linked particles and the reference hashmap.
+
+```rust
+impl Particle {
+    pub fn new(point: Point) -> Self {
+        Self {
+            linked: Vec::new(),
+            point,
+        }
+    }
+
+    pub fn link(&mut self, key: (u32, u32)) {
+        self.linked.push(key);
+    }
+
+    pub fn height(&self, map: &HashMap<(u32, u32), Particle>) -> f32 {
+        let mut m = 0.0;
+        for a in self.linked.clone() {
+            if let Some(t) = map.get(&a) {
+                let h = t.height(map);
+                if h > m {
+                    m = h;
+                }
+            } else {
+            }
+        }
+
+        return m + 1.0;
+    }
+}
+```
+
+This allows me to check the height at any point on the map. Two things to note, I don't have any circular referencing checks which will leads to stack overflows if it occurs, and I don't have height caching for performance. Circular referencing should only be a problem if I am incorrectly populating the hashmap and the performace isn't slow enough for me to notice compared to populating the tree so I'm going to leave things as is.
+
+For the next steps of DLA, this hashmap of points also needs to be scalable. At this stage I'm limiting to a scaling factor of 2. I haven't thought of a nice way to do the scaling for non-integer scaling factors yet. I start with any point in the hashmap, place it and the linked particles on a new map and then repeat for all the linked particles. For a scaling factor of 2 I scale the points and then place one particle in the middel. One issue with this is that when scaling, especially by a large number of layers, the grid appears very square. It is possible to see with moveable positions either as straight linear directions or also including the diagonals.
+
+```rust
+*   3   *
+0   x   2
+*   1   *
+
+0   7   6
+1   x   5
+2   3   4
+```
+
+![square-artefacts](./resources/layer_7_particle_sq.jpg "Layer 7 Particle Map - Square")
+![square-diag-artefacts](./resources/layer_7_particle.jpg "Layer 7 Particle Map")
+
+A fix that helps remove some of these artefacts is "nudging" the connecting particle to a nearby pixel that still connects the two particles. I am yet to implement this though as I need to include more checks (circular referencing issue) to prevent the application crashing if the new particle exists. This is not the simplest because of how the tree traversal is computed when scaling the particle map. On the plus side, the height map, once filtered, looks reasonable without this addition.
+
+Note: The height evaluation is still buggy and I plan to revisit it. Like many things in this project, it is only an issue when running diagonal connections I'm leaving it for now.
+
+Scaling of the heightmap is similarly simple but slightly different. With a scaling factor of 2, any single point on the heightmap translates to 4 on the scaled heightmap. Filtering is a convolution operation between some filter kernel and the heightmap itself. So far I've only tested gaussian kernel convolutions but I'd like to test other things too. The resulting heightmap looks, as expected, like a blurry version of the particle trees.
+
+![filtered-heightmap](./resources/layer_7_heightmap_base.jpg "Layer 7 Heightmap")
+
+Additional details is then added after the particle tree has been expanded.
+
+![detailed-heightmap](./resources/layer_7_heightmap_detailed.jpg "Layer 7 Heightmap Detailed")
+
+As mentioned before, the kernel parameters and how they scale with the size of the map heavily impact how nice the resulting terrain looks. Some parameters producing some really weird outputs. It is possible to see discrete square chunks in the final heightmap output. I suspect these are mostly due to how the kernel parameters are scaled.
+
+As a final filtering stage I apply some more fine blurs to the image to brush out any super sharp edges in various places along the map. This will remove a lot of the finer detail that rests on the map but thats fine.
+
+#### Final Touches and Thoughts
+
+While the algorithm is not totally complete, efficient or free of major bugs and the algorithm itself is a lot more complex than something like perlin noise, the final terrain outputs are really quite pretty.
+
+In the same way fractal perlin noise is run over multiple octaves allowing for sharper detail to be added to the map with lower amplitude, I'd like to try convert the DLA algorithm into something similar. In fact just adding a perlin noise map works quite nicely at adding a little more variety in the overall DLA map.
+
+![dla-perlin-heightmap](./resources/dla_perlin.jpg "Perlin & DLA")
 
 ## Terrain Model
 
 After ironing out some issues, I feel quite happy with the terrain generation. Erosion, typically using partical simulated erosion techniques, is a fairly simple technique for generating nice looking terrain from a baseline such as the perlin noise I have been generating or even to give additional detail to terrain generated with improved algorithms.
 
-Up until now I have been working with a heightmap generated from the noise functions. This model is sufficient for a simple simulation that applies erosion to a homogeneous property terrain. For this project, I would like to model terrain that contains terrain of various properties. With this I can apply properties such as the erosion hardness for determining how susceptible the terrain is to erosion, or cohesion, how "sticky" the material is to itself and other things around it.
+Up until now I have been working with a heightmap generated from the noise functions or some other algorithm. This model is sufficient for a simple simulation that applies erosion to a homogeneous property terrain. For this project, I would like to model terrain that contains terrain of various properties. With this I can apply properties such as the erosion hardness for determining how susceptible the terrain is to erosion, or cohesion, how "sticky" the material is to itself and other things around it.
 
 My initial thought went to [voxels](https://en.wikipedia.org/wiki/Voxel), or some variant such as [octrees](https://en.wikipedia.org/wiki/Octree), however, the disrete nature makes the terrain erosion also a discrete system. I want to maintain a reasonably high resolution on the meshed terrain though and so I played around the idea of fillable voxels, extended the octree where necessary to create additional detail. A fillable voxel would allow for the "height" to be calculated byu the filled volume of the voxel. I actually quite like this concept for something such as groundwater systems and fluid diffusion but that is for a later date. In the "fillable voxel" model, if a different material is deposited on another material, the actual height can be the sum of the filled voxels. At this stage I realised that really what I had thought of was a layer map where each block on the grid has an array of layers that makes up the terrain in that verticle section. Material can be added to or removed from layers with new layers only needed for a change of material type. For this system, if there are many material types, or similar to reality, the material is some distribution of all the possible parameters, the layers stack up very quickly as particles move around. However, this simulation will mostly play with several more discrete material types to mimic material such as stone, soil or sand. This means a lot of the material ends up condensing into large blocks of terrain layers.
 

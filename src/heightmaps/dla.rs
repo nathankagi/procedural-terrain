@@ -116,11 +116,16 @@ impl Particle {
         self.linked.push(key);
     }
 
-    pub fn height(&self, map: &HashMap<(u32, u32), Particle>) -> f32 {
+    pub fn height(
+        &self,
+        map: &HashMap<(u32, u32), Particle>,
+        chain: &mut HashMap<(u32, u32), bool>,
+    ) -> f32 {
+        chain.insert(self.point.key(), true);
         let mut m = 0.0;
         for a in self.linked.clone() {
             if let Some(t) = map.get(&a) {
-                let h = t.height(map);
+                let h = t.height(map, chain);
                 if h > m {
                     m = h;
                 }
@@ -201,6 +206,7 @@ impl Kernel {
 
 pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     let scale_factor: u32 = 2;
+    let height_scale = 80.0;
 
     let mut point_map: HashMap<(u32, u32), Particle> =
         HashMap::with_capacity(params.particles as usize);
@@ -267,10 +273,11 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     let _ = img.save_with_format(name, image::ImageFormat::Jpeg);
 
     // ========== heightmap from particle map  ==========
+    let mut chain: HashMap<(u32, u32), bool> = HashMap::with_capacity(params.particles as usize);
     for each in point_map.values() {
         height_map[each.point.y as usize][each.point.x as usize] = height_map
             [each.point.y as usize][each.point.x as usize]
-            + gradient_growth_limited(each.height(&point_map));
+            + (height_scale * gradient_growth_limited(each.height(&point_map, &mut chain)));
     }
 
     let name = format!("./outputs/layer_{}_heightmap.jpg", layer);
@@ -281,7 +288,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         println!("scaling heightmap layer {}", layer);
         height_map = scale_heightmap(&height_map);
         let mut layer_kernel = params.kernel.clone();
-        layer_kernel.size = (params.kernel.size as f32 * 2_u32.pow(layer) as f32 / 10.0) as usize;
+        layer_kernel.size = (params.kernel.size as f32 * 2_u32.pow(layer) as f32 / 12.0) as usize;
         if layer_kernel.size % 2 == 0 {
             layer_kernel.size = layer_kernel.size + 1;
         }
@@ -342,8 +349,10 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
 
         // ========== add particle map to heightmap ==========
         println!("adding to heightmap");
+        let mut chain: HashMap<(u32, u32), bool> =
+            HashMap::with_capacity(params.particles as usize);
         for each in point_map.values() {
-            let h = gradient_growth_limited(each.height(&point_map));
+            let h = height_scale * gradient_growth_limited(each.height(&point_map, &mut chain));
             height_map[each.point.y as usize][each.point.x as usize] =
                 height_map[each.point.y as usize][each.point.x as usize] + h;
         }
@@ -377,12 +386,20 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     height_map = filter_heightmap(height_map, layer_kernel.to_vec());
     save_heightmpa_as_jpg(&height_map, "./outputs/final.jpg");
 
-    let height_map_scale = 50.0;
-    for row in height_map.iter_mut() {
-        for val in row.iter_mut() {
-            *val *= height_map_scale;
-        }
-    }
+    // let height_map_scale = 50.0;
+    // for row in height_map.iter_mut() {
+    //     for val in row.iter_mut() {
+    //         *val *= height_map_scale;
+    //     }
+    // }
+
+    let mut layer_kernel = params.kernel.clone();
+    layer_kernel.size = 5;
+    layer_kernel.value = 2.0;
+    println!("final kernel size {}", layer_kernel.size);
+    println!("final kernel value {}", layer_kernel.value);
+    height_map = filter_heightmap(height_map, layer_kernel.to_vec());
+
     height_map
 }
 
@@ -525,10 +542,28 @@ fn walk(
 ) {
     let mut current = pos.clone();
 
+    if map.contains_key(&pos.key()) {
+        panic!("Trying to walk particle when already exists.")
+    }
+
     // *   3   *
-    // 1   x   2
-    // *   0   *
+    // 0   x   2
+    // *   1  *
     let cords: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
+
+    // 0   7   6
+    // 1   x   5
+    // 2   3   4
+    // let cords: [(i32, i32); 8] = [
+    //     (-1, 1),
+    //     (-1, 0),
+    //     (-1, -1),
+    //     (0, 1),
+    //     (0, -1),
+    //     (1, 1),
+    //     (1, 0),
+    //     (1, -1),
+    // ];
 
     let mut rng = rand::thread_rng();
 
@@ -536,7 +571,7 @@ fn walk(
         // check for connections
         let mut moves: Vec<Point> = Vec::with_capacity(cords.len());
         let mut links: Vec<Point> = Vec::with_capacity(cords.len());
-        let mut p_cnt = 0;
+        let mut p_cnt: u32 = 0;
 
         for c in cords {
             let x = c.0 + current.x as i32;
@@ -554,7 +589,7 @@ fn walk(
         }
 
         // insert if there is connection
-        if p_cnt >= 3 {
+        if p_cnt >= (cords.len() as u32) {
             let new_particle: Particle = Particle::new(current.clone());
             if let Some(l) = map.get_mut(&links[0].key()) {
                 l.link(new_particle.point.key());
@@ -565,7 +600,7 @@ fn walk(
         }
 
         if p_cnt > 0 {
-            let absorbtion_prob = absorbtion(params.t, p_cnt);
+            let absorbtion_prob = absorbtion(params.t, cords.len() as u32, p_cnt);
             let prob = rand::random::<f32>();
             if prob <= absorbtion_prob {
                 let new_particle: Particle = Particle::new(current.clone());
@@ -627,8 +662,8 @@ fn gradient_growth_ln(x: f32) -> f32 {
     x.ln()
 }
 
-fn absorbtion(t: f32, b: u32) -> f32 {
-    return t.powi((3 - b) as i32);
+fn absorbtion(t: f32, a: u32, b: u32) -> f32 {
+    return t.powi((a - b) as i32).min(1.0);
 }
 
 fn save_heightmpa_as_jpg(height_map: &Vec<Vec<f32>>, filename: &str) {

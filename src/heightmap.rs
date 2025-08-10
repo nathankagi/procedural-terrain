@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use nalgebra::{Vector2, Vector3};
 
 use crate::mesh::{Mesh, Meshable};
@@ -53,6 +55,24 @@ impl HeightMap {
 
     pub fn height(&self) -> usize {
         return self.map[0].len();
+    }
+}
+
+impl Add<HeightMap> for HeightMap {
+    type Output = HeightMap;
+
+    fn add(self, other: HeightMap) -> HeightMap {
+        assert!(self.height() == other.height());
+        assert!(self.width() == other.width());
+        let mut _h = HeightMap::new(self.width(), self.height());
+
+        for y in 0..self.height() {
+            for x in 0..self.width() {
+                _h.map[y][x] = self.map[y][x] + other.map[y][x];
+            }
+        }
+
+        return _h;
     }
 }
 
