@@ -206,7 +206,7 @@ impl Kernel {
 
 pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     let scale_factor: u32 = 2;
-    let height_scale = 80.0;
+    let height_scale = 100.0;
 
     let mut point_map: HashMap<(u32, u32), Particle> =
         HashMap::with_capacity(params.particles as usize);
@@ -377,7 +377,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     println!("Saving final heightmap");
     height_map = scale_heightmap(&height_map);
     let mut layer_kernel = params.kernel.clone();
-    layer_kernel.size = (params.height as f32 * 2_u32.pow(params.layers) as f32 / 20.0) as usize;
+    layer_kernel.size = (params.height as f32 * 2_u32.pow(params.layers) as f32 / 30.0) as usize;
     if layer_kernel.size % 2 == 0 {
         layer_kernel.size = layer_kernel.size + 1;
     }

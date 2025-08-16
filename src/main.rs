@@ -13,16 +13,13 @@ use rayon::iter::{
 
 use procedural_terrain::heightmap::HeightMap;
 use procedural_terrain::heightmap::{self};
-use procedural_terrain::heightmaps::{self, dla};
+use procedural_terrain::heightmaps;
 use procedural_terrain::mesh::Meshable;
 use procedural_terrain::{noise, terrain};
 
 #[derive(Component)]
 struct Terrain {
     size: usize,
-    // octaves: i32,
-    // persistence: f32,
-    // permutation: Vec<i32>,
     mesh_handle: Handle<Mesh>,
 }
 
@@ -47,49 +44,6 @@ fn tests(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // let params = heightmaps::dla::DiffusionLimitedAggregationParams {
-    //     height: 10,
-    //     width: 10,
-    //     spawns: vec![heightmaps::dla::Point::new(5, 5)],
-    //     t: 0.1,
-    //     particles: 70,
-    //     layers: 8,
-    //     density: 1.0,
-    //     kernel: heightmaps::dla::Kernel {
-    //         size: 51,
-    //         value: 4.0,
-    //         k_type: heightmaps::dla::KernelType::Gaussian,
-    //     },
-    // };
-
-    // let map = heightmaps::dla::generate(params);
-
-    // let heightmap = heightmap::HeightMap::load(&map);
-
-    // let meshed = heightmap.mesh_triangles();
-
-    // let mesh = Mesh::new(
-    //     PrimitiveTopology::TriangleList,
-    //     RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    // )
-    // .with_inserted_indices(Indices::U32(meshed.indices))
-    // .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, meshed.vertices)
-    // .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, meshed.normals)
-    // .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, meshed.uvs);
-
-    // let mesh_handle = meshes.add(mesh);
-
-    // commands.spawn(PbrBundle {
-    //     // mesh: meshes.add(mesh_handle),
-    //     mesh: mesh_handle,
-    //     material: materials.add(StandardMaterial {
-    //         base_color: Color::GRAY,
-    //         perceptual_roughness: 1.0,
-    //         ..Default::default()
-    //     }),
-    //     transform: Transform::from_xyz(0.0, 0.0, 0.0),
-    //     ..Default::default()
-    // });
 }
 
 fn setup(
@@ -118,10 +72,10 @@ fn setup(
     // let mut terrain = terrain::Terrain::new(size, size);
 
     let params = heightmaps::dla::DiffusionLimitedAggregationParams {
-        height: 4,
-        width: 4,
-        spawns: vec![heightmaps::dla::Point::new(2, 2)],
-        t: 0.5,
+        height: 3,
+        width: 3,
+        spawns: vec![heightmaps::dla::Point::new(1, 1)],
+        t: 0.7,
         particles: 5,
         layers: 8,
         density: 1.0,
@@ -132,7 +86,7 @@ fn setup(
         },
     };
 
-    let _map = dla::generate(params);
+    let _map = heightmaps::dla::generate(params);
     let dla_heightmap = heightmap::HeightMap { map: _map };
 
     let mut rng = rand::thread_rng();
@@ -147,7 +101,7 @@ fn setup(
     };
 
     let p_heightmap = heightmap::generate(heightmap::Algorithms::FractalPerlin(params.clone()));
-    let heightmap = dla_heightmap + p_heightmap;
+    let heightmap: HeightMap = dla_heightmap + p_heightmap;
     // let heightmap = dla_heightmap;
 
     let meshed = heightmap.mesh_triangles();
@@ -166,9 +120,6 @@ fn setup(
     commands.spawn(
         (Terrain {
             size: size,
-            // octaves: params.octaves,
-            // persistence: params.persistence,
-            // permutation: permutation.clone(),
             mesh_handle: mesh_handle.clone(),
         }),
     );
