@@ -1,9 +1,7 @@
 use std::ops::Add;
 use nalgebra::{Vector3};
 
-use crate::mesh::{Mesh, Meshable};
-use crate::noise;
-use crate::heightmaps;
+use crate::{heightmaps, mesh::{Mesh, Meshable}};
 
 pub struct HeightMap {
     pub map: Vec<Vec<f32>>,
@@ -150,12 +148,12 @@ impl Meshable for HeightMap {
 fn generate_fractal_perlin(params: heightmaps::perlin::FractalPerlinParams) -> HeightMap {
     // let mut rng = rand::thread_rng();
     // let seed = rng.gen::<u32>();
-    let permutation = noise::generate_permutation(params.seed);
+    let permutation = heightmaps::perlin::generate_permutation(params.seed);
 
     let mut hmap = HeightMap::new(params.width, params.height);
     for i in 0..params.height {
         for j in 0..params.width {
-            hmap.map[i][j] = noise::octave_perlin3d(
+            hmap.map[i][j] = heightmaps::perlin::octave_perlin3d(
                 i as f32 / params.height as f32,
                 j as f32 / params.width as f32,
                 0.0,

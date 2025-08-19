@@ -13,7 +13,7 @@ use rayon::iter::{
 
 use procedural_terrain::heightmaps;
 use procedural_terrain::mesh::Meshable;
-use procedural_terrain::{noise, terrain};
+use procedural_terrain::terrain;
 
 #[derive(Component)]
 struct Terrain {
@@ -92,9 +92,9 @@ fn setup(
     let params = heightmaps::perlin::FractalPerlinParams {
         height: dla_heightmap.height(),
         width: dla_heightmap.width(),
-        scale: 100.0,
-        octaves: 12,
-        persistence: 0.5,
+        scale: 200.0,
+        octaves: 4,
+        persistence: 0.2,
         seed: seed,
     };
 
