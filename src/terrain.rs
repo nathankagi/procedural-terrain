@@ -1,6 +1,6 @@
 use nalgebra::Vector3;
 
-use crate::heightmap::HeightMap;
+use crate::heightmaps::lib::HeightMap;
 use crate::mesh::{Mesh, Meshable};
 
 const MAX_LAYER_COUNT: usize = 100;

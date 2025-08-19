@@ -11,8 +11,6 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 
-use procedural_terrain::heightmap::HeightMap;
-use procedural_terrain::heightmap::{self};
 use procedural_terrain::heightmaps;
 use procedural_terrain::mesh::Meshable;
 use procedural_terrain::{noise, terrain};
@@ -27,7 +25,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(RenderPlugin {
             render_creation: RenderCreation::Automatic(WgpuSettings {
-                // backends: Some(Backends::VULKAN),
+                backends: Some(Backends::VULKAN),
                 ..default()
             }),
             ..default()
@@ -87,11 +85,11 @@ fn setup(
     };
 
     let _map = heightmaps::dla::generate(params);
-    let dla_heightmap = heightmap::HeightMap { map: _map };
+    let dla_heightmap = heightmaps::lib::HeightMap { map: _map };
 
     let mut rng = rand::thread_rng();
     let seed = rng.gen::<u32>();
-    let params = heightmap::FractalPerlinParams {
+    let params = heightmaps::perlin::FractalPerlinParams {
         height: dla_heightmap.height(),
         width: dla_heightmap.width(),
         scale: 100.0,
@@ -100,8 +98,9 @@ fn setup(
         seed: seed,
     };
 
-    let p_heightmap = heightmap::generate(heightmap::Algorithms::FractalPerlin(params.clone()));
-    let heightmap: HeightMap = dla_heightmap + p_heightmap;
+    let p_heightmap = heightmaps::lib::HeightMap::generate(heightmaps::lib::Algorithms::FractalPerlin(params.clone()));
+    let heightmap: heightmaps::lib::HeightMap = dla_heightmap + p_heightmap;
+
     // let heightmap = dla_heightmap;
 
     let meshed = heightmap.mesh_triangles();

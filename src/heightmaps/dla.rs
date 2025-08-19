@@ -1,4 +1,4 @@
-use image::{GrayImage, ImageFormat, Luma, Rgb, RgbImage};
+use image::{GrayImage, Luma, Rgb, RgbImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -374,7 +374,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         }
     }
 
-    println!("Saving final heightmap");
+    println!("saving final heightmap");
     height_map = scale_heightmap(&height_map);
     let mut layer_kernel = params.kernel.clone();
     layer_kernel.size = (params.height as f32 * 2_u32.pow(params.layers) as f32 / 30.0) as usize;
