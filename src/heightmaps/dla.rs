@@ -309,8 +309,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
             width: params.width * 2_u32.pow(layer) as usize,
             spawns: params.spawns.clone(),
             t: params.t,
-            // particles: params.particles * 2_u32.pow(2 * layer),
-            particles: (0.08
+            particles: (0.1
                 * params.height as f32
                 * 2_u32.pow(layer) as f32
                 * params.width as f32
@@ -394,7 +393,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     // }
 
     let mut layer_kernel = params.kernel.clone();
-    layer_kernel.size = 5;
+    layer_kernel.size = 7;
     layer_kernel.value = 2.0;
     println!("final kernel size {}", layer_kernel.size);
     println!("final kernel value {}", layer_kernel.value);

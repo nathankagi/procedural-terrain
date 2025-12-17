@@ -217,12 +217,13 @@ Particle spawn behaviour also plays a large part in the overal shape. I'm only p
 
 #### Heightmaps
 
-The next stage of DLA is making a heightmap from these "point trees". The height The algorithm itself is as follows:
+The next stage of DLA is making a heightmap from these "point trees". The full algorithm itself is as follows:
 
 - Create a base point map
+- Create a heightmap from the point map
 - Repeat the following for x layers
   - Scale the heightmap
-  - Filter the heightmaps
+  - Filter the heightmap
   - Scale the pointmap
   - Add detail to the pointmap
   - Add detailed pointmap to heightmap
@@ -279,7 +280,7 @@ For the next steps of DLA, this hashmap of points also needs to be scalable. At 
 
 A fix that helps remove some of these artefacts is "nudging" the connecting particle to a nearby pixel that still connects the two particles. I am yet to implement this though as I need to include more checks (circular referencing issue) to prevent the application crashing if the new particle exists. This is not the simplest because of how the tree traversal is computed when scaling the particle map. On the plus side, the height map, once filtered, looks reasonable without this addition.
 
-Note: The height evaluation is still buggy and I plan to revisit it. Like many things in this project, it is only an issue when running diagonal connections I'm leaving it for now.
+Note: The height evaluation is still buggy and I plan to revisit it. Like many things in this project, it is only an issue when running diagonal connections so I'm leaving it for now.
 
 Scaling of the heightmap is similarly simple but slightly different. With a scaling factor of 2, any single point on the heightmap translates to 4 on the scaled heightmap. Filtering is a convolution operation between some filter kernel and the heightmap itself. So far I've only tested gaussian kernel convolutions but I'd like to test other things too. The resulting heightmap looks, as expected, like a blurry version of the particle trees.
 
@@ -299,7 +300,7 @@ While the algorithm is not totally complete, efficient or free of major bugs and
 
 In the same way fractal perlin noise is run over multiple octaves allowing for sharper detail to be added to the map with lower amplitude, I'd like to try convert the DLA algorithm into something similar. In fact just adding a perlin noise map works quite nicely at adding a little more variety in the overall DLA map.
 
-![dla-perlin-heightmap](./resources/dla_perlin.jpg "Perlin & DLA")
+![dla-perlin-heightmap](./resources/dla_perlin.png "Perlin & DLA")
 
 ## Terrain Model
 

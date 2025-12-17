@@ -73,8 +73,8 @@ fn setup(
         height: 3,
         width: 3,
         spawns: vec![heightmaps::dla::Point::new(1, 1)],
-        t: 0.7,
-        particles: 5,
+        t: 0.4,
+        particles: 2,
         layers: 8,
         density: 1.0,
         kernel: heightmaps::dla::Kernel {
@@ -93,8 +93,8 @@ fn setup(
         height: dla_heightmap.height(),
         width: dla_heightmap.width(),
         scale: 200.0,
-        octaves: 4,
-        persistence: 0.2,
+        octaves: 12,
+        persistence: 0.65,
         seed: seed,
     };
 
