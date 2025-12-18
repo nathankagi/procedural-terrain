@@ -2,7 +2,7 @@
 
 ## Introduction
 
-I have bene looking for new project ideas, mostly I have been looking at projects that require a little more performance from a languge. Although it seems almost every second person has implimented their own, I stumbled upon procedural terrain generation. While the simplest form is quite underwhelming, some of the additional features such as wind and water based erosion simulations sounded very exciting. So I decided I'd build a terrain simulation, aiming to eventually have the following features:
+I have bene looking for new project ideas, mostly I have been looking at projects that require a little more performance from a language. Although it seems almost every second person has implimented their own, I stumbled upon procedural terrain generation. While the simplest form is quite underwhelming, some of the additional features such as wind and water based erosion simulations sounded very exciting. So I decided I'd build a terrain simulation, aiming to eventually have the following features:
 
 - procedural terrain generation
 - water and wind based erosion simulations includign material properties
@@ -301,6 +301,10 @@ While the algorithm is not totally complete, efficient or free of major bugs and
 In the same way fractal perlin noise is run over multiple octaves allowing for sharper detail to be added to the map with lower amplitude, I'd like to try convert the DLA algorithm into something similar. In fact just adding a perlin noise map works quite nicely at adding a little more variety in the overall DLA map.
 
 ![dla-perlin-heightmap](./resources/dla_perlin.png "Perlin & DLA")
+
+## UI
+
+Up until now I have used some variables for the terrain generation parameters. Also the terrain generation is done once when the application starts. I want to move these out into some ui for the user to trigger so I can play around with the variables for the terrain gen, ideally I'd have the generation process visualised while its building.
 
 ## Terrain Model
 
