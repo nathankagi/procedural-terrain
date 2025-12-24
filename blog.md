@@ -302,6 +302,12 @@ In the same way fractal perlin noise is run over multiple octaves allowing for s
 
 ![dla-perlin-heightmap](./resources/dla_perlin.png "Perlin & DLA")
 
+## WGPU
+
+Converting from bevy to wgpu.
+
+Using the tutorials from [learn wgpu](https://github.com/sotrh/learn-wgpu) as a baseline for this.
+
 ## UI
 
 Up until now I have used some variables for the terrain generation parameters. Also the terrain generation is done once when the application starts. I want to move these out into some ui for the user to trigger so I can play around with the variables for the terrain gen, ideally I'd have the generation process visualised while its building.
