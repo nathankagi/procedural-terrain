@@ -12,6 +12,7 @@ use rand::Rng;
 use procedural_terrain::heightmaps;
 use procedural_terrain::mesh::Meshable;
 use procedural_terrain::terrain;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 #[derive(Component)]
 struct TerrainComponent {
@@ -33,7 +34,6 @@ fn main() {
         }))
         // .add_plugins(DefaultPlugins)
         .add_systems(Startup, (setup, setup_lights, setup_ambient_light))
-        // .add_systems(Update, (update_terrain))
         .run();
 }
 
@@ -170,44 +170,3 @@ fn setup_lights(mut commands: Commands) {
         ..default()
     });
 }
-
-// Update functions
-// fn update_terrain(
-//     time: Res<Time>,
-//     mut meshes: ResMut<Assets<Mesh>>,
-//     mut query: Query<&mut Terrain>,
-// ) {
-//     for terrain in query.iter_mut() {
-//         if let Some(mesh) = meshes.get_mut(terrain.mesh_handle.clone()) {
-//             let mut heightmap = HeightMap::new(terrain.size, terrain.size);
-//             let z = time.elapsed_seconds() / 100.0;
-
-//             let height = terrain.size;
-//             let width = terrain.size;
-//             let scale = terrain.size as f32;
-
-//             heightmap
-//                 .map
-//                 .par_iter_mut()
-//                 .enumerate()
-//                 .for_each(|(i, row)| {
-//                     row.iter_mut().enumerate().for_each(|(j, elem)| {
-//                         *elem = noise::octave_perlin3d(
-//                             i as f32 / height as f32,
-//                             j as f32 / width as f32,
-//                             z,
-//                             terrain.octaves,
-//                             terrain.persistence,
-//                             &terrain.permutation,
-//                         ) as f32
-//                             * scale;
-//                     });
-//                 });
-
-//             let meshed = heightmap.mesh_triangles();
-
-//             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, meshed.vertices);
-//             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, meshed.normals);
-//         }
-//     }
-// }

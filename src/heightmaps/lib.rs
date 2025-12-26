@@ -6,6 +6,8 @@ use crate::{
     mesh::{Mesh, Meshable},
 };
 
+const NORMAL_Y_COMPONENT: f32 = 2.0;
+
 pub struct HeightMap {
     pub map: Vec<Vec<f32>>,
 }
@@ -111,7 +113,8 @@ impl Meshable for HeightMap {
                 };
 
                 let normal =
-                    Vector3::new(height_l - height_r, 2.0, height_d - height_u).normalize();
+                    Vector3::new(height_l - height_r, NORMAL_Y_COMPONENT, height_d - height_u)
+                        .normalize();
                 normals.push([normal.x as f32, normal.y as f32, normal.z as f32]);
 
                 // Indices

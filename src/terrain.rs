@@ -1,166 +1,171 @@
-use nalgebra::Vector3;
+use std::collections::HashMap;
 
-use crate::heightmaps::lib::HeightMap;
-use crate::mesh::{Mesh, Meshable};
+pub const CHUNK_SIZE: usize = 64;
 
-const MAX_LAYER_COUNT: usize = 100;
-const NORMAL_Y_COMPONENT: f32 = 2.0;
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MaterialID(pub u16);
+
+pub struct MaterialRegistry {
+    materials: Vec<Material>,
+}
 
 pub struct Terrain {
-    width: usize,
-    height: usize,
-    cells: Vec<Vec<Cell>>,
+    chunks: HashMap<(i32, i32), Chunk>,
 }
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Material {
-    erosion: f32,
-    cohesion: f32,
-    saturation: f32,
-    permeability: f32,
-    mass: f32,
+    pub erosion: f32,
+    pub cohesion: f32,
+    pub saturation: f32,
+    pub permeability: f32,
+    pub mass: f32,
 }
 
 #[derive(Copy, Clone)]
 pub struct Layer {
-    height: f32,
-    material: Material,
+    thickness: f32,
+    material_id: MaterialID,
 }
 
 #[derive(Clone)]
 pub struct Cell {
     layers: Vec<Layer>,
-    layer_index: usize,
-    modified: bool,
-    height: f32,
 }
 
+#[repr(C)]
 #[derive(Copy, Clone)]
-pub struct Chunk {}
+pub struct SurfaceCell {
+    pub height: f32,
+    pub material_id: MaterialID,
+}
 
-pub struct ChunkUniform {}
+#[derive(Clone)]
+pub struct Chunk {
+    pub position: (i32, i32),
+    pub cells: Vec<Cell>,
+}
+
+impl MaterialRegistry {
+    pub fn get(&self, id: MaterialID) -> &Material {
+        &self.materials[id.0 as usize]
+    }
+}
 
 impl Terrain {
-    pub fn new(width: usize, height: usize) -> Self {
-        Terrain {
-            width,
-            height,
-            cells: vec![vec![Cell::new(); width]; height],
-        }
-    }
+    pub fn cell_mut(&mut self, wx: i32, wy: i32) -> &mut Cell {
+        let cx = wx.div_euclid(CHUNK_SIZE as i32);
+        let cy = wy.div_euclid(CHUNK_SIZE as i32);
 
-    pub fn at(&mut self, x: usize, y: usize) -> &mut Cell {
-        return &mut self.cells[x][y];
-    }
+        let lx = wx.rem_euclid(CHUNK_SIZE as i32) as usize;
+        let ly = wy.rem_euclid(CHUNK_SIZE as i32) as usize;
 
-    pub fn height(&mut self, x: usize, y: usize) -> f32 {
-        return self.cells[x][y].height();
-    }
+        let chunk = self
+            .chunks
+            .entry((cx, cy))
+            .or_insert_with(|| Chunk::new((cx, cy)));
 
-    pub fn material(&self, x: usize, y: usize) -> Material {
-        return self.cells[x][y].layers.last().unwrap().material;
-    }
-
-    pub fn normal(&mut self, x: usize, y: usize) -> Vector3<f32> {
-        let height_l = if x > 0 {
-            self.cells[x - 1][y].height()
-        } else {
-            self.cells[x][y].height()
-        };
-
-        let height_r = if x < self.width - 1 {
-            self.cells[x + 1][y].height()
-        } else {
-            self.cells[x][y].height()
-        };
-
-        let height_d = if y > 0 {
-            self.cells[x][y - 1].height()
-        } else {
-            self.cells[x][y].height()
-        };
-
-        let height_u = if y < self.height - 1 {
-            self.cells[x][y + 1].height()
-        } else {
-            self.cells[x][y].height()
-        };
-
-        return Vector3::new(height_l - height_r, NORMAL_Y_COMPONENT, height_d - height_u)
-            .normalize();
-    }
-
-    pub fn gradient(&mut self, x: usize, y: usize) -> Vector3<f32> {
-        let norm: Vector3<f32> = self.normal(x, y);
-        return Vector3::new(-norm.x, 0.0, -norm.z);
-    }
-
-    pub fn add(&mut self, x: usize, y: usize, layer: Layer) {
-        self.cells[x][y].add(layer);
-    }
-
-    pub fn remove(&mut self, x: usize, y: usize, height: f32) -> Layer {
-        return self.cells[x][y].remove(height);
-    }
-
-    pub fn add_heightmap(&mut self, map: HeightMap) {
-        // add to terrain data from a heightmap
-        todo!()
+        chunk.cell_mut(lx, ly)
     }
 }
 
 impl Cell {
     pub fn new() -> Self {
-        Cell {
-            layers: Vec::new(),
-            layer_index: 0,
-            modified: false,
-            height: 0.0,
-        }
+        Self { layers: Vec::new() }
     }
 
-    pub fn add(&mut self, layer: Layer) {
-        self.modified = true;
-
-        if self.layers[self.layer_index].material == layer.material {
-            self.layers[self.layer_index].height =
-                self.layers[self.layer_index].height + layer.height;
-        } else {
-            self.layers.push(layer);
-            self.layer_index = self.layers.len();
-        }
+    pub fn total_height(&self) -> f32 {
+        self.layers.iter().map(|l| l.thickness).sum()
     }
 
-    pub fn remove(&mut self, height: f32) -> Layer {
-        self.modified = true;
-
-        return if height < self.layers[self.layer_index].height {
-            self.layers[self.layer_index].height = self.layers[self.layer_index].height - height;
-            let mut o = self.layers[self.layer_index].clone();
-            o.height = height;
-            o
-        } else {
-            let o = self.layers[self.layer_index].clone();
-            self.layers.remove(self.layer_index);
-            self.layer_index = self.layers.len();
-            o
-        };
+    pub fn surface_layer(&self) -> Option<&Layer> {
+        self.layers.last()
     }
 
-    pub fn height(&mut self) -> f32 {
-        if self.modified {
-            let mut h: f32 = 0.0;
-            for layer in self.layers.iter() {
-                h = h + layer.height;
+    pub fn surface_material(&self) -> Option<MaterialID> {
+        self.surface_layer().map(|l| l.material_id)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.layers.is_empty()
+    }
+
+    pub fn deposit(&mut self, thickness: f32, material_id: MaterialID) {
+        if let Some(top) = self.layers.last_mut() {
+            if top.material_id == material_id {
+                top.thickness += thickness;
+                return;
             }
-            self.height = h;
-            self.modified = false;
         }
-        return self.height;
+
+        self.layers.push(Layer {
+            thickness,
+            material_id,
+        });
     }
 
-    pub fn depth(&self) -> usize {
-        return self.layers.len();
+    pub fn erode(&mut self, mut amount: f32) -> Vec<Layer> {
+        let mut removed = Vec::new();
+
+        while amount > 0.0 {
+            let Some(top) = self.layers.last_mut() else {
+                break;
+            };
+
+            if top.thickness > amount {
+                top.thickness -= amount;
+                removed.push(Layer {
+                    thickness: amount,
+                    material_id: top.material_id,
+                });
+                break;
+            } else {
+                let layer = self.layers.pop().unwrap();
+                amount -= layer.thickness;
+                removed.push(layer);
+            }
+        }
+
+        removed
+    }
+}
+
+impl Chunk {
+    pub fn new(position: (i32, i32)) -> Self {
+        Self {
+            position,
+            cells: vec![Cell::new(); CHUNK_SIZE * CHUNK_SIZE],
+        }
+    }
+
+    #[inline]
+    fn index(x: usize, y: usize) -> usize {
+        debug_assert!(x < CHUNK_SIZE && y < CHUNK_SIZE);
+        y * CHUNK_SIZE + x
+    }
+
+    pub fn cell(&self, x: usize, y: usize) -> &Cell {
+        &self.cells[Self::index(x, y)]
+    }
+
+    pub fn cell_mut(&mut self, x: usize, y: usize) -> &mut Cell {
+        &mut self.cells[Self::index(x, y)]
+    }
+
+    pub fn extract_surface(&self) -> Vec<SurfaceCell> {
+        self.cells
+            .iter()
+            .map(|cell| {
+                let height = cell.total_height();
+                let id = cell.surface_material().map(|id| id.0).unwrap_or(0);
+
+                SurfaceCell {
+                    height,
+                    material_id: MaterialID(id),
+                }
+            })
+            .collect()
     }
 }
 
@@ -177,10 +182,8 @@ impl Layer {}
 impl Default for Layer {
     fn default() -> Self {
         Layer {
-            height: 0.0,
-            material: Material {
-                ..Default::default()
-            },
+            thickness: 0.0,
+            material_id: MaterialID(0),
         }
     }
 }
@@ -193,66 +196,6 @@ impl Default for Material {
             saturation: 0.0,
             permeability: 0.0,
             mass: 0.0,
-        }
-    }
-}
-
-impl Meshable for Terrain {
-    fn mesh_triangles(&mut self) -> Mesh {
-        let height = self.height;
-        let width = self.width;
-
-        let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(width * height);
-        let mut normals: Vec<[f32; 3]> = Vec::with_capacity(width * height);
-        let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(width * height);
-        let mut indices: Vec<u32> = Vec::new();
-
-        for y in 0..width {
-            for x in 0..height {
-                // UVs
-                uvs.push([x as f32 / width as f32, y as f32 / height as f32]);
-
-                // Normals
-                let normal = self.normal(x, y);
-                normals.push([normal.x as f32, normal.y as f32, normal.z as f32]);
-
-                // Indices
-                if x < (height - 1) && y < (width - 1) {
-                    let top_left = (x + y * width) as u32;
-                    let top_right = ((x + 1) + y * width) as u32;
-                    let bottom_left = (x + (y + 1) * width) as u32;
-                    let bottom_right = ((x + 1) + (y + 1) * width) as u32;
-
-                    indices.push(top_left);
-                    indices.push(bottom_left);
-                    indices.push(top_right);
-
-                    indices.push(top_right);
-                    indices.push(bottom_left);
-                    indices.push(bottom_right);
-                }
-
-                // Vertices
-                vertices.push([x as f32, self.height(x, y) as f32, y as f32]);
-            }
-        }
-
-        Mesh {
-            vertices: vertices,
-            normals: normals,
-            uvs: uvs,
-            indices: indices,
-        }
-    }
-
-    fn remesh_triangles(&mut self, mesh: &mut Mesh, modified: Vec<(u32, u32)>) {
-        for (x, y) in modified {
-            let idx = (y * self.width as u32 + x) as usize;
-
-            let normal = self.normal(x as usize, y as usize);
-            mesh.normals[idx] = [normal.x as f32, normal.y as f32, normal.z as f32];
-
-            mesh.vertices[idx] = [x as f32, self.height(x as usize, y as usize), y as f32];
         }
     }
 }

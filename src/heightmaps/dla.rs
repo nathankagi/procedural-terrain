@@ -332,7 +332,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
 
         let bar = ProgressBar::new(layer_params.particles as u64);
         let style = ProgressStyle::with_template(
-            "dla layer: {bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
+            "DLA layer: {bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
         )
         .unwrap();
         bar.set_style(style);

@@ -3,12 +3,13 @@
 ## Notes
 
 To do
-- 
+
+- refactor terrain/heightmaps
 - orbital camera
 - add colour to vertices
 - storage of data models
-    - .obj files for loading and saving of meshes
-    - 
+  - .obj files for loading and saving of meshes
+  - 
 - update Meshable trait
 - extract all dla generation params
 - formalise generation tool params
