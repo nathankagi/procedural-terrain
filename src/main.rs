@@ -1,31 +1,32 @@
 use bevy::prelude::*;
-use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
+use bevy::render::settings::{RenderCreation, WgpuSettings};
 use bevy::render::RenderPlugin;
 use bevy::render::{
     mesh::{Indices, Mesh},
     render_asset::RenderAssetUsages,
     render_resource::PrimitiveTopology,
 };
+use log::info;
 use rand::Rng;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
-};
 
 use procedural_terrain::heightmaps;
 use procedural_terrain::mesh::Meshable;
 use procedural_terrain::terrain;
 
 #[derive(Component)]
-struct Terrain {
+struct TerrainComponent {
     size: usize,
     mesh_handle: Handle<Mesh>,
 }
 
 fn main() {
+    // env_logger::init();
+
+    info!("Starting application");
     App::new()
         .add_plugins(DefaultPlugins.set(RenderPlugin {
             render_creation: RenderCreation::Automatic(WgpuSettings {
-                backends: Some(Backends::VULKAN),
+                // backends: Some(Backends::VULKAN),
                 ..default()
             }),
             ..default()
@@ -98,8 +99,10 @@ fn setup(
         seed: seed,
     };
 
-    let p_heightmap = heightmaps::lib::HeightMap::generate(heightmaps::lib::Algorithms::FractalPerlin(params.clone()));
-    let heightmap: heightmaps::lib::HeightMap = dla_heightmap + p_heightmap;
+    let p_heightmap = heightmaps::lib::HeightMap::generate(
+        heightmaps::lib::Algorithms::FractalPerlin(params.clone()),
+    );
+    let mut heightmap: heightmaps::lib::HeightMap = dla_heightmap + p_heightmap;
 
     // let heightmap = dla_heightmap;
 
@@ -117,8 +120,8 @@ fn setup(
     let mesh_handle = meshes.add(mesh);
 
     commands.spawn(
-        (Terrain {
-            size: size,
+        (TerrainComponent {
+            size,
             mesh_handle: mesh_handle.clone(),
         }),
     );

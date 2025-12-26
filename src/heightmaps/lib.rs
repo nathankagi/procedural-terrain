@@ -1,7 +1,10 @@
+use nalgebra::Vector3;
 use std::ops::Add;
-use nalgebra::{Vector3};
 
-use crate::{heightmaps, mesh::{Mesh, Meshable}};
+use crate::{
+    heightmaps,
+    mesh::{Mesh, Meshable},
+};
 
 pub struct HeightMap {
     pub map: Vec<Vec<f32>>,
@@ -68,7 +71,7 @@ impl Add<HeightMap> for HeightMap {
 }
 
 impl Meshable for HeightMap {
-    fn mesh_triangles(&self) -> Mesh {
+    fn mesh_triangles(&mut self) -> Mesh {
         let height = self.height();
         let width = self.width();
 
@@ -133,10 +136,10 @@ impl Meshable for HeightMap {
         }
 
         Mesh {
-            vertices: vertices,
-            normals: normals,
-            uvs: uvs,
-            indices: indices,
+            vertices,
+            normals,
+            uvs,
+            indices,
         }
     }
 
@@ -168,7 +171,9 @@ fn generate_fractal_perlin(params: heightmaps::perlin::FractalPerlinParams) -> H
     return hmap;
 }
 
-fn generate_gradient_frac_perlin(params: heightmaps::perlin::GradientFractalPerlinParams) -> HeightMap {
+fn generate_gradient_frac_perlin(
+    params: heightmaps::perlin::GradientFractalPerlinParams,
+) -> HeightMap {
     HeightMap::new(10, 10)
 }
 

@@ -1,5 +1,6 @@
 use image::{GrayImage, Luma, Rgb, RgbImage};
 use indicatif::{ProgressBar, ProgressStyle};
+use log::{debug, error, info, log_enabled, Level};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
@@ -40,6 +41,8 @@ pub enum DiffusionLimitedAggregationMode {
 pub enum ParticleSpawnPattern {
     Random,
     Edge,
+    Radius, // radius - spawn particles at a weighted value of the mean radius of the current particles
+    Pattern, // pattern - need to define some patterns for spawn gen
 }
 
 #[derive(Clone, Copy)]
@@ -212,7 +215,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         HashMap::with_capacity(params.particles as usize);
     let mut height_map: Vec<Vec<f32>> = vec![vec![1.0; params.width]; params.height];
 
-    println!("Adding starting points to DLA image");
+    debug!("Adding starting points to DLA image");
     for p in params.spawns.clone() {
         if point_map.contains_key(&p.key()) {
         } else {
@@ -237,7 +240,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         kernel: params.kernel,
     };
 
-    println!(
+    debug!(
         "populating layer {}/{} with dimensions {}x{}",
         layer + 1,
         params.layers,
@@ -247,7 +250,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
 
     let bar = ProgressBar::new(layer_params.particles as u64);
     let style = ProgressStyle::with_template(
-        "dla layer: {bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
+        "DLA layer: {bar:40} {percent}% | eta: {eta} elapsed: {elapsed} {pos:>7}/{len:7}",
     )
     .unwrap();
     bar.set_style(style);
@@ -264,7 +267,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
 
     bar.finish();
 
-    println!("saving layer image");
+    debug!("Saving layer image");
     let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
     for each in point_map.keys() {
         img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
@@ -285,25 +288,25 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
 
     for layer in 1..params.layers {
         // ========== scale heightmap ==========
-        println!("scaling heightmap layer {}", layer);
+        debug!("Scaling heightmap layer {}", layer);
         height_map = scale_heightmap(&height_map);
         let mut layer_kernel = params.kernel.clone();
         layer_kernel.size = (params.kernel.size as f32 * 2_u32.pow(layer) as f32 / 12.0) as usize;
         if layer_kernel.size % 2 == 0 {
             layer_kernel.size = layer_kernel.size + 1;
         }
-        println!("{} kernel size {}", layer, layer_kernel.size);
-        println!("{} kernel value {}", layer, layer_kernel.value);
+        debug!("{} kernel size {}", layer, layer_kernel.size);
+        debug!("{} kernel value {}", layer, layer_kernel.value);
         height_map = filter_heightmap(height_map, layer_kernel.to_vec());
         let name = format!("./outputs/layer_{}_heightmap_base.jpg", layer);
         save_heightmpa_as_jpg(&height_map, &name);
 
         // ========== scale particle map ==========
-        println!("scaling particle map");
+        debug!("Scaling particle map");
         point_map = scale_particle_map(scale_factor, &point_map);
 
         // ========== add to particle map ==========
-        println!("adding to particle map");
+        debug!("Adding to particle map");
         let layer_params = DiffusionLimitedAggregationParams {
             height: params.height * 2_u32.pow(layer) as usize,
             width: params.width * 2_u32.pow(layer) as usize,
@@ -319,7 +322,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
             kernel: params.kernel,
         };
 
-        println!(
+        debug!(
             "populating layer {}/{} with dimensions {}x{}",
             layer + 1,
             params.layers,
@@ -347,7 +350,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         bar.finish();
 
         // ========== add particle map to heightmap ==========
-        println!("adding to heightmap");
+        debug!("Adding to heightmap");
         let mut chain: HashMap<(u32, u32), bool> =
             HashMap::with_capacity(params.particles as usize);
         for each in point_map.values() {
@@ -357,7 +360,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         }
 
         // ========== save images ==========
-        println!("saving layer image");
+        debug!("Saving layer image");
         let mut img = RgbImage::new(layer_params.width as u32, layer_params.height as u32);
         for each in point_map.keys() {
             img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
@@ -373,15 +376,15 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         }
     }
 
-    println!("saving final heightmap");
+    debug!("saving final heightmap");
     height_map = scale_heightmap(&height_map);
     let mut layer_kernel = params.kernel.clone();
     layer_kernel.size = (params.height as f32 * 2_u32.pow(params.layers) as f32 / 30.0) as usize;
     if layer_kernel.size % 2 == 0 {
         layer_kernel.size = layer_kernel.size + 1;
     }
-    println!("final kernel size {}", layer_kernel.size);
-    println!("final kernel value {}", layer_kernel.value);
+    debug!("final kernel size {}", layer_kernel.size);
+    debug!("final kernel value {}", layer_kernel.value);
     height_map = filter_heightmap(height_map, layer_kernel.to_vec());
     save_heightmpa_as_jpg(&height_map, "./outputs/final.jpg");
 
@@ -395,8 +398,8 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     let mut layer_kernel = params.kernel.clone();
     layer_kernel.size = 7;
     layer_kernel.value = 2.0;
-    println!("final kernel size {}", layer_kernel.size);
-    println!("final kernel value {}", layer_kernel.value);
+    debug!("Final kernel size {}", layer_kernel.size);
+    debug!("Final kernel value {}", layer_kernel.value);
     height_map = filter_heightmap(height_map, layer_kernel.to_vec());
 
     height_map
@@ -512,7 +515,7 @@ fn random_particle(height: u32, width: u32, map: &HashMap<(u32, u32), Particle>)
         ParticleSpawnPattern::Edge => {
             return Point::new(0, 0);
         }
-        ParticleSpawnPattern::Random => {
+        ParticleSpawnPattern::Random | _ => {
             let mut i = 0;
             loop {
                 let current = Point::new(
@@ -525,7 +528,7 @@ fn random_particle(height: u32, width: u32, map: &HashMap<(u32, u32), Particle>)
                 }
 
                 if i > 10000 {
-                    println!("WARNING: new particle failed to find new spot");
+                    error!("Particle failed to find new spot");
                     return Point::new(0, 0);
                 }
                 i = i + 1;

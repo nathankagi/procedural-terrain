@@ -1,5 +1,5 @@
 pub trait Meshable {
-    fn mesh_triangles(&self) -> Mesh;
+    fn mesh_triangles(&mut self) -> Mesh;
     fn remesh_triangles(&mut self, mesh: &mut Mesh, modified: Vec<(u32, u32)>);
 }
 

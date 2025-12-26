@@ -12,6 +12,13 @@ noise = "0.8.2"
 rand = "0.8.5"
 rayon = "1.7.0"
 indicatif = "0.17.5"
+env_logger = "0.10"
+log = "0.4"
+
+[build-dependencies]
+anyhow = "1.0"
+fs_extra = "1.2"
+glob = "0.3"
 
 [profile.dev]
 opt-level = 1

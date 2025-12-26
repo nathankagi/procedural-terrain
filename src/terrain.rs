@@ -4,6 +4,7 @@ use crate::heightmaps::lib::HeightMap;
 use crate::mesh::{Mesh, Meshable};
 
 const MAX_LAYER_COUNT: usize = 100;
+const NORMAL_Y_COMPONENT: f32 = 2.0;
 
 pub struct Terrain {
     width: usize,
@@ -30,10 +31,14 @@ pub struct Layer {
 pub struct Cell {
     layers: Vec<Layer>,
     layer_index: usize,
+    modified: bool,
+    height: f32,
 }
 
 #[derive(Copy, Clone)]
 pub struct Chunk {}
+
+pub struct ChunkUniform {}
 
 impl Terrain {
     pub fn new(width: usize, height: usize) -> Self {
@@ -48,7 +53,7 @@ impl Terrain {
         return &mut self.cells[x][y];
     }
 
-    pub fn height(&self, x: usize, y: usize) -> f32 {
+    pub fn height(&mut self, x: usize, y: usize) -> f32 {
         return self.cells[x][y].height();
     }
 
@@ -56,7 +61,7 @@ impl Terrain {
         return self.cells[x][y].layers.last().unwrap().material;
     }
 
-    pub fn normal(&self, x: usize, y: usize) -> Vector3<f32> {
+    pub fn normal(&mut self, x: usize, y: usize) -> Vector3<f32> {
         let height_l = if x > 0 {
             self.cells[x - 1][y].height()
         } else {
@@ -81,10 +86,11 @@ impl Terrain {
             self.cells[x][y].height()
         };
 
-        return Vector3::new(height_l - height_r, 2.0, height_d - height_u).normalize();
+        return Vector3::new(height_l - height_r, NORMAL_Y_COMPONENT, height_d - height_u)
+            .normalize();
     }
 
-    pub fn gradient(&self, x: usize, y: usize) -> Vector3<f32> {
+    pub fn gradient(&mut self, x: usize, y: usize) -> Vector3<f32> {
         let norm: Vector3<f32> = self.normal(x, y);
         return Vector3::new(-norm.x, 0.0, -norm.z);
     }
@@ -99,6 +105,7 @@ impl Terrain {
 
     pub fn add_heightmap(&mut self, map: HeightMap) {
         // add to terrain data from a heightmap
+        todo!()
     }
 }
 
@@ -107,10 +114,14 @@ impl Cell {
         Cell {
             layers: Vec::new(),
             layer_index: 0,
+            modified: false,
+            height: 0.0,
         }
     }
 
     pub fn add(&mut self, layer: Layer) {
+        self.modified = true;
+
         if self.layers[self.layer_index].material == layer.material {
             self.layers[self.layer_index].height =
                 self.layers[self.layer_index].height + layer.height;
@@ -121,6 +132,8 @@ impl Cell {
     }
 
     pub fn remove(&mut self, height: f32) -> Layer {
+        self.modified = true;
+
         return if height < self.layers[self.layer_index].height {
             self.layers[self.layer_index].height = self.layers[self.layer_index].height - height;
             let mut o = self.layers[self.layer_index].clone();
@@ -134,12 +147,16 @@ impl Cell {
         };
     }
 
-    pub fn height(&self) -> f32 {
-        let mut h: f32 = 0.0;
-        for layer in self.layers.iter() {
-            h = h + layer.height;
+    pub fn height(&mut self) -> f32 {
+        if self.modified {
+            let mut h: f32 = 0.0;
+            for layer in self.layers.iter() {
+                h = h + layer.height;
+            }
+            self.height = h;
+            self.modified = false;
         }
-        return h;
+        return self.height;
     }
 
     pub fn depth(&self) -> usize {
@@ -181,7 +198,7 @@ impl Default for Material {
 }
 
 impl Meshable for Terrain {
-    fn mesh_triangles(&self) -> Mesh {
+    fn mesh_triangles(&mut self) -> Mesh {
         let height = self.height;
         let width = self.width;
 
