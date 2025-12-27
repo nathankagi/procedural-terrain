@@ -272,8 +272,8 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     for each in point_map.keys() {
         img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
     }
-    let name = format!("./outputs/layer_{}_particle.jpg", 0);
-    let _ = img.save_with_format(name, image::ImageFormat::Jpeg);
+    let name = format!("./outputs/layer_{}_particle.png", 0);
+    let _ = img.save_with_format(name, image::ImageFormat::Png);
 
     // ========== heightmap from particle map  ==========
     let mut chain: HashMap<(u32, u32), bool> = HashMap::with_capacity(params.particles as usize);
@@ -283,7 +283,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
             + (height_scale * gradient_growth_limited(each.height(&point_map, &mut chain)));
     }
 
-    let name = format!("./outputs/layer_{}_heightmap.jpg", layer);
+    let name = format!("./outputs/layer_{}_heightmap.png", layer);
     save_heightmpa_as_jpg(&height_map, &name);
 
     for layer in 1..params.layers {
@@ -298,7 +298,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         debug!("{} kernel size {}", layer, layer_kernel.size);
         debug!("{} kernel value {}", layer, layer_kernel.value);
         height_map = filter_heightmap(height_map, layer_kernel.to_vec());
-        let name = format!("./outputs/layer_{}_heightmap_base.jpg", layer);
+        let name = format!("./outputs/layer_{}_heightmap_base.png", layer);
         save_heightmpa_as_jpg(&height_map, &name);
 
         // ========== scale particle map ==========
@@ -365,10 +365,10 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         for each in point_map.keys() {
             img.put_pixel(each.0 as u32, each.1 as u32, Rgb([255, 255, 255]));
         }
-        let name = format!("./outputs/layer_{}_particle.jpg", layer);
-        let _ = img.save_with_format(name, image::ImageFormat::Jpeg);
+        let name = format!("./outputs/layer_{}_particle.png", layer);
+        let _ = img.save_with_format(name, image::ImageFormat::Png);
 
-        let name = format!("./outputs/layer_{}_heightmap_detailed.jpg", layer);
+        let name = format!("./outputs/layer_{}_heightmap_detailed.png", layer);
         save_heightmpa_as_jpg(&height_map, &name);
 
         if layer == (params.layers - 1) {
@@ -386,7 +386,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     debug!("final kernel size {}", layer_kernel.size);
     debug!("final kernel value {}", layer_kernel.value);
     height_map = filter_heightmap(height_map, layer_kernel.to_vec());
-    save_heightmpa_as_jpg(&height_map, "./outputs/final.jpg");
+    save_heightmpa_as_jpg(&height_map, "./outputs/final.png");
 
     // let height_map_scale = 50.0;
     // for row in height_map.iter_mut() {
@@ -702,5 +702,5 @@ fn save_heightmpa_as_jpg(height_map: &Vec<Vec<f32>>, filename: &str) {
         }
     }
 
-    let _ = img.save_with_format(filename, image::ImageFormat::Jpeg);
+    let _ = img.save_with_format(filename, image::ImageFormat::Png);
 }

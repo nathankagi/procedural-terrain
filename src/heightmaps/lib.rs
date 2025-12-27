@@ -73,7 +73,7 @@ impl Add<HeightMap> for HeightMap {
 }
 
 impl Meshable for HeightMap {
-    fn mesh_triangles(&mut self) -> Mesh {
+    fn mesh_triangles(&self) -> Mesh {
         let height = self.height();
         let width = self.width();
 
@@ -82,8 +82,8 @@ impl Meshable for HeightMap {
         let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(width * height);
         let mut indices: Vec<u32> = Vec::new();
 
-        for y in 0..width {
-            for x in 0..height {
+        for x in 0..height {
+            for y in 0..width {
                 // UVs
                 uvs.push([x as f32 / width as f32, y as f32 / height as f32]);
 
