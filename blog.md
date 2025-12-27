@@ -229,7 +229,9 @@ The next stage of DLA is making a heightmap from these "point trees". The full a
   - Add detailed pointmap to heightmap
 - Apply last filtering stages
 
-Firstly, to determine what the height of each particle is, when a particle attaches to another particle we keep track of which particle attached to other particles. The height is the based on the height of the largest attached particle +1. To keep track of particles and their connections I used a hashmap to keep all the particles and I have a struct with a function to calculate the height based on the linked particles and the reference hashmap.
+Firstly, to determine what the height of each particle is, when a particle attaches to another particle we keep track of which particle attached to other particles. The height is the based on the height of the largest attached particle +1. An output function is then applied to this to help determine the height-profile of the particle tree to prevent the initial particles scaling too quickly. This is also quite useful for determining how sharp these ridges are.
+
+To keep track of particles and their connections I used a hashmap to keep all the particles and I have a struct with a function to calculate the height based on the linked particles and the reference hashmap.
 
 ```rust
 impl Particle {
@@ -302,6 +304,8 @@ In the same way fractal perlin noise is run over multiple octaves allowing for s
 
 ![dla-perlin-heightmap](./resources/dla_perlin.png "Perlin & DLA")
 
+A large downside of this linked particle system is that providing manually authored starting images is a little more tricky as the particle links must also be defined. I'd like to implement an image-based DLA generator so I can use a tool like paint to provide a starting point for some custom and slightly more reproducable models. I believe it would be possible if all edge particles have a value of 1, all others with a value of 0. Then for each non-edge particle taking the max of any surrounding particles +1. My concern is that this will bias towards a sharper tree in more dense maps. This is because a particle will look at each surrounding particle instead of each linked particle. This however would allow for easier mapping of custom images as now edge particles must be defined. It would also be possible then to start with an edge particle placement to randomly seed the lowest sections of the terrain before starting the DLA algorithm.
+
 ## Terrain Model
 
 After ironing out some issues, I feel quite happy with the terrain generation. Erosion, typically using partical simulated erosion techniques, is a fairly simple technique for generating nice looking terrain from a baseline such as the perlin noise I have been generating or even to give additional detail to terrain generated with improved algorithms.
@@ -312,44 +316,9 @@ My initial thought went to [voxels](https://en.wikipedia.org/wiki/Voxel), or som
 
 I found a [blog](https://nickmcd.me/) with a couple of posts implementing basically the exact thing I wanted to implement and a [post](https://nickmcd.me/2022/04/15/soilmachine/) on a data model for this application seemed to progress towards the style of model I was thinking of too. Reading further into the content it seems like a lot of works are very similar to what I've been wanting to try out.
 
-For an actual data model I have several criteria:
+## Erosion
 
-- The terrain and operations are easily computed in parallel
-- Fast access for regularly used data such as terrain height, normals, etc
-- Able to update terrain ouptuts for meshes efficiently (e.g. grid chunks)
-- Simplicity
+Eulerian erosion (grid-based)
+Lagrangian erosion (particle-based)
 
-### Implementation
-
-After having mulled over rough implementation ideas I started to actually write code. I started with a couple of structs I'd use for each of the elements. I added a `Chunk` struct, mostly to remind myself of the idea but I don't think I will actually end up using this for updates to the terrain mesh.
-
-```rust
-pub struct Terrain {
-    width: usize,
-    height: usize,
-    cells: Vec<Vec<Cell>>,
-}
-
-pub struct Material {
-    erosion: f32,
-    cohesion: f32,
-    saturation: f32,
-    permeability: f32,
-}
-
-pub struct Layer {
-    height: f32,
-    material: Material,
-}
-
-pub struct Cell {
-    layers: Vec<Layer>,
-    layer_index: i32,
-}
-
-pub struct Chunk {}
-```
-
-### Erosion
-
-## Performance
+## Weather
