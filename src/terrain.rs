@@ -2,10 +2,6 @@ use std::collections::HashMap;
 
 pub const CHUNK_SIZE: usize = 64;
 
-#[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MaterialID(pub u16);
-
 pub struct MaterialRegistry {
     materials: Vec<Material>,
 }
@@ -26,7 +22,7 @@ pub struct Material {
 #[derive(Copy, Clone)]
 pub struct Layer {
     thickness: f32,
-    material_id: MaterialID,
+    material_id: u16,
 }
 
 #[derive(Clone)]
@@ -38,7 +34,7 @@ pub struct Cell {
 #[derive(Copy, Clone)]
 pub struct SurfaceCell {
     pub height: f32,
-    pub material_id: MaterialID,
+    pub material_id: u16,
 }
 
 #[derive(Clone)]
@@ -48,7 +44,7 @@ pub struct Chunk {
 }
 
 impl MaterialRegistry {
-    pub fn get(&self, id: MaterialID) -> &Material {
+    pub fn get(&self, id: u16) -> &Material {
         &self.materials[id.0 as usize]
     }
 }
@@ -83,7 +79,7 @@ impl Cell {
         self.layers.last()
     }
 
-    pub fn surface_material(&self) -> Option<MaterialID> {
+    pub fn surface_material(&self) -> Option<u16> {
         self.surface_layer().map(|l| l.material_id)
     }
 
@@ -91,7 +87,7 @@ impl Cell {
         self.layers.is_empty()
     }
 
-    pub fn deposit(&mut self, thickness: f32, material_id: MaterialID) {
+    pub fn deposit(&mut self, thickness: f32, material_id: u16) {
         if let Some(top) = self.layers.last_mut() {
             if top.material_id == material_id {
                 top.thickness += thickness;
@@ -162,7 +158,7 @@ impl Chunk {
 
                 SurfaceCell {
                     height,
-                    material_id: MaterialID(id),
+                    material_id: u16(id),
                 }
             })
             .collect()
@@ -183,7 +179,7 @@ impl Default for Layer {
     fn default() -> Self {
         Layer {
             thickness: 0.0,
-            material_id: MaterialID(0),
+            material_id: u16(0),
         }
     }
 }
