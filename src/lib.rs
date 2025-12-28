@@ -2,6 +2,7 @@ use std::{iter, sync::Arc};
 
 use cgmath::prelude::*;
 use mesh::Meshable;
+use model::Vertex;
 use wgpu::util::DeviceExt;
 use winit::{
     application::ApplicationHandler,
@@ -17,14 +18,9 @@ use wasm_bindgen::prelude::*;
 mod camera;
 mod heightmaps;
 mod mesh;
+mod model;
+mod resources;
 mod texture;
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
-}
 
 pub struct State {
     surface: wgpu::Surface<'static>,
@@ -34,9 +30,9 @@ pub struct State {
     is_surface_configured: bool,
     render_pipeline: wgpu::RenderPipeline,
     window: Arc<Window>,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
+    // vertex_buffer: wgpu::Buffer,
+    // index_buffer: wgpu::Buffer,
+    // num_indices: u32,
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: texture::Texture,
     depth_texture: texture::Texture,
@@ -47,6 +43,7 @@ pub struct State {
     camera_controller: camera::CameraController,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
+    model: model::Model,
 }
 
 struct Instance {
@@ -81,27 +78,6 @@ impl Instance {
             model: (cgmath::Matrix4::from_translation(self.position)
                 * cgmath::Matrix4::from(self.rotation))
             .into(),
-        }
-    }
-}
-
-impl Vertex {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
         }
     }
 }
@@ -311,7 +287,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc(), InstanceRaw::desc()],
+                buffers: &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -364,17 +340,17 @@ impl State {
                     cgmath::Deg(0.0),
                 ),
             },
-            Instance {
-                position: cgmath::Vector3 {
-                    x: -2.0,
-                    y: -2.0,
-                    z: -2.0,
-                },
-                rotation: cgmath::Quaternion::from_axis_angle(
-                    cgmath::Vector3::unit_z(),
-                    cgmath::Deg(0.0),
-                ),
-            },
+            // Instance {
+            //     position: cgmath::Vector3 {
+            //         x: -2.0,
+            //         y: -2.0,
+            //         z: -2.0,
+            //     },
+            //     rotation: cgmath::Quaternion::from_axis_angle(
+            //         cgmath::Vector3::unit_z(),
+            //         cgmath::Deg(0.0),
+            //     ),
+            // },
         ];
 
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
@@ -384,43 +360,49 @@ impl State {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let size = 25;
-        let params = heightmaps::perlin::FractalPerlinParams {
-            height: size,
-            width: size,
-            scale: 10.0,
-            octaves: 12,
-            persistence: 0.65,
-            seed: 10,
-        };
+        // let size = 25;
+        // let params = heightmaps::perlin::FractalPerlinParams {
+        //     height: size,
+        //     width: size,
+        //     scale: 10.0,
+        //     octaves: 12,
+        //     persistence: 0.65,
+        //     seed: 10,
+        // };
 
-        let heightmap = heightmaps::lib::HeightMap::generate(
-            heightmaps::lib::Algorithms::FractalPerlin(params),
-        );
+        // let heightmap = heightmaps::lib::HeightMap::generate(
+        //     heightmaps::lib::Algorithms::FractalPerlin(params),
+        // );
 
-        let meshed = heightmap.mesh_triangles();
+        // let meshed = heightmap.mesh_triangles();
 
-        let vertices: Vec<Vertex> = meshed
-            .vertices
-            .into_iter()
-            .map(|pos| Vertex {
-                position: [pos[2], pos[1], pos[0]],
-                tex_coords: [pos[0] / size as f32, pos[2] / size as f32],
-            })
-            .collect();
+        // let vertices: Vec<model::ModelVertex> = meshed
+        //     .vertices
+        //     .into_iter()
+        //     .map(|pos| model::ModelVertex {
+        //         position: [pos[2], pos[1], pos[0]],
+        //         tex_coords: [pos[0] / size as f32, pos[2] / size as f32],
+        //         normal: [0.0, 0.0, 1.0],
+        //     })
+        //     .collect();
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        // let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Vertex Buffer"),
+        //     contents: bytemuck::cast_slice(&vertices),
+        //     usage: wgpu::BufferUsages::VERTEX,
+        // });
 
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&meshed.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-        let num_indices = meshed.indices.len() as u32;
+        // let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Index Buffer"),
+        //     contents: bytemuck::cast_slice(&meshed.indices),
+        //     usage: wgpu::BufferUsages::INDEX,
+        // });
+        // let num_indices = meshed.indices.len() as u32;
+
+        let png_model =
+            resources::load_png_model("test_map.png", &device, &queue, &texture_bind_group_layout)
+                .await
+                .unwrap();
 
         Ok(Self {
             surface,
@@ -430,9 +412,6 @@ impl State {
             is_surface_configured: false,
             window,
             render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            num_indices,
             diffuse_bind_group,
             diffuse_texture,
             depth_texture,
@@ -443,6 +422,7 @@ impl State {
             camera_controller,
             instances,
             instance_buffer,
+            model: png_model,
         })
     }
 
@@ -516,16 +496,17 @@ impl State {
                 multiview_mask: None,
             });
 
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_pipeline(&self.render_pipeline);
-
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
+            use model::DrawModel;
+            render_pass.draw_model_instanced(
+                &self.model,
+                0..self.instances.len() as u32,
+                &self.camera_bind_group,
+            );
         }
 
         self.queue.submit(iter::once(encoder.finish()));

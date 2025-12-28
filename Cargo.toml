@@ -28,6 +28,15 @@ egui = "0.33.0"
 egui-wgpu = { version = "0.33.0", features = ["winit"] }
 egui-winit = "0.33.0"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.11" }
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Window",
+    "Element",
+    "Location",
+]}
+
 [build-dependencies]
 anyhow = "1.0"
 fs_extra = "1.2"

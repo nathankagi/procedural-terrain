@@ -284,7 +284,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     }
 
     let name = format!("./outputs/layer_{}_heightmap.png", layer);
-    save_heightmpa_as_jpg(&height_map, &name);
+    save_heightmpa_as_png(&height_map, &name);
 
     for layer in 1..params.layers {
         // ========== scale heightmap ==========
@@ -299,7 +299,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         debug!("{} kernel value {}", layer, layer_kernel.value);
         height_map = filter_heightmap(height_map, layer_kernel.to_vec());
         let name = format!("./outputs/layer_{}_heightmap_base.png", layer);
-        save_heightmpa_as_jpg(&height_map, &name);
+        save_heightmpa_as_png(&height_map, &name);
 
         // ========== scale particle map ==========
         debug!("Scaling particle map");
@@ -369,7 +369,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
         let _ = img.save_with_format(name, image::ImageFormat::Png);
 
         let name = format!("./outputs/layer_{}_heightmap_detailed.png", layer);
-        save_heightmpa_as_jpg(&height_map, &name);
+        save_heightmpa_as_png(&height_map, &name);
 
         if layer == (params.layers - 1) {
             break;
@@ -386,7 +386,7 @@ pub fn generate(params: DiffusionLimitedAggregationParams) -> Vec<Vec<f32>> {
     debug!("final kernel size {}", layer_kernel.size);
     debug!("final kernel value {}", layer_kernel.value);
     height_map = filter_heightmap(height_map, layer_kernel.to_vec());
-    save_heightmpa_as_jpg(&height_map, "./outputs/final.png");
+    save_heightmpa_as_png(&height_map, "./outputs/final.png");
 
     // let height_map_scale = 50.0;
     // for row in height_map.iter_mut() {
@@ -668,7 +668,7 @@ fn absorbtion(t: f32, a: u32, b: u32) -> f32 {
     return t.powi((a - b) as i32).min(1.0);
 }
 
-fn save_heightmpa_as_jpg(height_map: &Vec<Vec<f32>>, filename: &str) {
+fn save_heightmpa_as_png(height_map: &Vec<Vec<f32>>, filename: &str) {
     let height = height_map.len();
     let width = height_map[0].len();
 
