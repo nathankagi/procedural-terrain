@@ -5,7 +5,7 @@ use cgmath::InnerSpace;
 use image;
 use wgpu::util::DeviceExt;
 
-use crate::{model, texture};
+use crate::{heightmaps, mesh, model, texture};
 
 #[cfg(target_arch = "wasm32")]
 fn format_url(file_name: &str) -> reqwest::Url {
@@ -60,6 +60,69 @@ pub async fn load_texture(
 ) -> anyhow::Result<texture::Texture> {
     let data = load_binary(file_name).await?;
     texture::Texture::from_bytes(device, queue, &data, file_name)
+}
+
+pub async fn model_from_mesh(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    meshed: mesh::Mesh,
+) -> anyhow::Result<model::Model> {
+    let size = 25;
+    let vertices: Vec<model::ModelVertex> = meshed
+        .vertices
+        .into_iter()
+        .map(|pos| model::ModelVertex {
+            position: [pos[2], pos[1], pos[0]],
+            tex_coords: [pos[0] / size as f32, pos[2] / size as f32],
+            normal: [0.0, 0.0, 1.0],
+        })
+        .collect();
+
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(&vertices),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Index Buffer"),
+        contents: bytemuck::cast_slice(&meshed.indices),
+        usage: wgpu::BufferUsages::INDEX,
+    });
+
+    let default_texture_file = "rainbow_gradient.png".to_string();
+    let diffuse_texture = load_texture(&default_texture_file, device, queue).await?;
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+            },
+        ],
+        label: None,
+    });
+
+    Ok(model::Model {
+        meshes: vec![model::Mesh {
+            name: file_name.to_string(),
+            vertex_buffer,
+            index_buffer,
+            num_elements: meshed.indices.len() as u32,
+            material: 0,
+        }],
+        materials: vec![model::Material {
+            name: file_name.to_string(),
+            diffuse_texture: diffuse_texture,
+            bind_group: bind_group,
+        }],
+    })
 }
 
 pub async fn load_png_model(

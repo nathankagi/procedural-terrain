@@ -360,49 +360,37 @@ impl State {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        // let size = 25;
-        // let params = heightmaps::perlin::FractalPerlinParams {
-        //     height: size,
-        //     width: size,
-        //     scale: 10.0,
-        //     octaves: 12,
-        //     persistence: 0.65,
-        //     seed: 10,
-        // };
+        let size = 25;
+        let params = heightmaps::perlin::FractalPerlinParams {
+            height: size,
+            width: size,
+            scale: 20.0,
+            octaves: 12,
+            persistence: 0.65,
+            seed: 10,
+        };
 
-        // let heightmap = heightmaps::lib::HeightMap::generate(
-        //     heightmaps::lib::Algorithms::FractalPerlin(params),
-        // );
+        let heightmap = heightmaps::lib::HeightMap::generate(
+            heightmaps::lib::Algorithms::FractalPerlin(params),
+        );
 
-        // let meshed = heightmap.mesh_triangles();
+        let meshed = heightmap.mesh_triangles();
 
-        // let vertices: Vec<model::ModelVertex> = meshed
-        //     .vertices
-        //     .into_iter()
-        //     .map(|pos| model::ModelVertex {
-        //         position: [pos[2], pos[1], pos[0]],
-        //         tex_coords: [pos[0] / size as f32, pos[2] / size as f32],
-        //         normal: [0.0, 0.0, 1.0],
-        //     })
-        //     .collect();
+        let model_name = "heightmap".to_string();
+        let model = resources::model_from_mesh(
+            &model_name,
+            &device,
+            &queue,
+            &texture_bind_group_layout,
+            meshed,
+        )
+        .await
+        .unwrap();
 
-        // let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //     label: Some("Vertex Buffer"),
-        //     contents: bytemuck::cast_slice(&vertices),
-        //     usage: wgpu::BufferUsages::VERTEX,
-        // });
-
-        // let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //     label: Some("Index Buffer"),
-        //     contents: bytemuck::cast_slice(&meshed.indices),
-        //     usage: wgpu::BufferUsages::INDEX,
-        // });
-        // let num_indices = meshed.indices.len() as u32;
-
-        let png_model =
-            resources::load_png_model("test_map.png", &device, &queue, &texture_bind_group_layout)
-                .await
-                .unwrap();
+        // let png_model =
+        //     resources::load_png_model("test_map.png", &device, &queue, &texture_bind_group_layout)
+        //         .await
+        //         .unwrap();
 
         Ok(Self {
             surface,
@@ -422,7 +410,7 @@ impl State {
             camera_controller,
             instances,
             instance_buffer,
-            model: png_model,
+            model,
         })
     }
 
