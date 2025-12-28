@@ -5,7 +5,7 @@ use cgmath::InnerSpace;
 use image;
 use wgpu::util::DeviceExt;
 
-use crate::{heightmaps, mesh, model, texture};
+use crate::{heightmaps, model, texture};
 
 #[cfg(target_arch = "wasm32")]
 fn format_url(file_name: &str) -> reqwest::Url {
@@ -67,16 +67,17 @@ pub async fn model_from_mesh(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
-    meshed: mesh::Mesh,
+    meshed: heightmaps::lib::HeightMapMesh,
 ) -> anyhow::Result<model::Model> {
-    let size = 25;
     let vertices: Vec<model::ModelVertex> = meshed
         .vertices
         .into_iter()
-        .map(|pos| model::ModelVertex {
+        .zip(meshed.uvs.into_iter())
+        .zip(meshed.normals.into_iter())
+        .map(|((pos, uv), normal)| model::ModelVertex {
             position: [pos[2], pos[1], pos[0]],
-            tex_coords: [pos[0] / size as f32, pos[2] / size as f32],
-            normal: [0.0, 0.0, 1.0],
+            tex_coords: uv,
+            normal,
         })
         .collect();
 

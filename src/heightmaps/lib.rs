@@ -1,15 +1,19 @@
 use nalgebra::Vector3;
 use std::ops::Add;
 
-use crate::{
-    heightmaps,
-    mesh::{Mesh, Meshable},
-};
+use crate::heightmaps;
 
 const NORMAL_Y_COMPONENT: f32 = 2.0;
 
 pub struct HeightMap {
     pub map: Vec<Vec<f32>>,
+}
+
+pub struct HeightMapMesh {
+    pub vertices: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub uvs: Vec<[f32; 2]>,
+    pub indices: Vec<u32>,
 }
 
 pub enum Algorithms {
@@ -52,28 +56,8 @@ impl HeightMap {
     pub fn height(&self) -> usize {
         return self.map.len();
     }
-}
 
-impl Add<HeightMap> for HeightMap {
-    type Output = HeightMap;
-
-    fn add(self, other: HeightMap) -> HeightMap {
-        assert!(self.height() == other.height());
-        assert!(self.width() == other.width());
-        let mut _h = HeightMap::new(self.width(), self.height());
-
-        for y in 0..self.height() {
-            for x in 0..self.width() {
-                _h.map[y][x] = self.map[y][x] + other.map[y][x];
-            }
-        }
-
-        return _h;
-    }
-}
-
-impl Meshable for HeightMap {
-    fn mesh_triangles(&self) -> Mesh {
+    pub fn to_mesh(&self) -> HeightMapMesh {
         let height = self.height();
         let width = self.width();
 
@@ -138,16 +122,30 @@ impl Meshable for HeightMap {
             }
         }
 
-        Mesh {
+        HeightMapMesh {
             vertices,
             normals,
             uvs,
             indices,
         }
     }
+}
 
-    fn remesh_triangles(&mut self, mesh: &mut Mesh, modified: Vec<(u32, u32)>) {
-        self.mesh_triangles();
+impl Add<HeightMap> for HeightMap {
+    type Output = HeightMap;
+
+    fn add(self, other: HeightMap) -> HeightMap {
+        assert!(self.height() == other.height());
+        assert!(self.width() == other.width());
+        let mut _h = HeightMap::new(self.width(), self.height());
+
+        for y in 0..self.height() {
+            for x in 0..self.width() {
+                _h.map[y][x] = self.map[y][x] + other.map[y][x];
+            }
+        }
+
+        return _h;
     }
 }
 

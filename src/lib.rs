@@ -1,7 +1,6 @@
 use std::{iter, sync::Arc};
 
 use cgmath::prelude::*;
-use mesh::Meshable;
 use model::Vertex;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -17,7 +16,6 @@ use wasm_bindgen::prelude::*;
 
 mod camera;
 mod heightmaps;
-mod mesh;
 mod model;
 mod resources;
 mod texture;
@@ -374,7 +372,7 @@ impl State {
             heightmaps::lib::Algorithms::FractalPerlin(params),
         );
 
-        let meshed = heightmap.mesh_triangles();
+        let meshed = heightmap.to_mesh();
 
         let model_name = "heightmap".to_string();
         let model = resources::model_from_mesh(
