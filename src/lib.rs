@@ -270,12 +270,12 @@ impl State {
             multiview_mask: None,
         });
 
-        let size = 20;
+        let size = 25;
         let params = heightmaps::perlin::FractalPerlinParams {
             height: size,
             width: size,
             scale: 10.0,
-            octaves: 2,
+            octaves: 12,
             persistence: 0.65,
             seed: 10,
         };
@@ -290,7 +290,7 @@ impl State {
             .vertices
             .into_iter()
             .map(|pos| Vertex {
-                position: [pos[0], pos[2], pos[1]],
+                position: [pos[2], pos[1], pos[0]],
                 tex_coords: [pos[0] / size as f32, pos[2] / size as f32],
             })
             .collect();
@@ -395,7 +395,7 @@ impl State {
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
