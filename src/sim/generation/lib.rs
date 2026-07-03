@@ -1,12 +1,9 @@
-use nalgebra::Vector3;
 use std::ops::Add;
-
-use crate::heightmaps;
 
 const NORMAL_Y_COMPONENT: f32 = 2.0;
 
 pub struct HeightMap {
-    pub map: Vec<Vec<f32>>,
+    pub map: Vec<f32>,
 }
 
 pub struct HeightMapMesh {

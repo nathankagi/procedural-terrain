@@ -1,6 +1,4 @@
-use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
-use rand::SeedableRng;
+const GRAD2D: [[i32; 2]; 4] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 
 #[derive(Clone)]
 pub struct FractalPerlinParams {
@@ -63,9 +61,8 @@ fn grad3d(hash: i32, x: f32, y: f32, z: f32) -> f32 {
 // }
 
 fn grad2d(hash: i32, x: f32, y: f32) -> f32 {
-    let vec = vec![[0, 1], [0, -1], [1, 0], [-1, 0]];
     let index = hash % 4;
-    let g = vec[index as usize];
+    let g = GRAD2D[index as usize];
     return (g[0] as f32 * x) + (g[1] as f32 * y);
 }
 
@@ -181,13 +178,18 @@ pub fn octave_perlin2d(
 }
 
 pub fn generate_permutation(seed: u32) -> Vec<i32> {
-    let mut rng: StdRng = SeedableRng::seed_from_u64(seed.into());
-    let mut permutation: Vec<i32> = (0..256).collect();
-    permutation.shuffle(&mut rng);
+    let mut p: Vec<i32> = (0..256).collect();
+    let mut s = seed as u64;
 
-    let mut p: Vec<i32> = vec![];
-    for i in 0..512 {
-        p.push(permutation[i % 256]);
+    for i in (1..256).rev() {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        
+        let j = (s as usize) % (i + 1);
+        p.swap(i, j);
     }
-    return p;
+
+    let doubled: Vec<i32> = p.iter().chain(p.iter()).copied().collect();
+    return doubled;
 }

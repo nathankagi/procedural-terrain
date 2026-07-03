@@ -1,5 +1,5 @@
-use procedural_terrain::run;
+use lib;
 
 fn main() {
-    run().unwrap();
+    lib::run().unwrap();
 }
