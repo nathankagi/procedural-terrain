@@ -12,6 +12,7 @@ winit = "0.30"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "0.3"
 glam = "0.28"
+cgmath = "0.18" # need to remove
 log = "0.4"
 env_logger = "0.11"
 egui = "0.28"
