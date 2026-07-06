@@ -29,7 +29,8 @@ indicatif = "0.17"
 tobj = "3.0"
 
 [profile.dev]
-opt-level = 1
+opt-level = 0
+debug = true
 
 [profile.dev.package."*"]
 opt-level = 3
