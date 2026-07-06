@@ -1,9 +1,12 @@
 use std::ops::Add;
 
+use cgmath::{InnerSpace, Vector3};
+use super::{dla, perlin};
+
 const NORMAL_Y_COMPONENT: f32 = 2.0;
 
 pub struct HeightMap {
-    pub map: Vec<f32>,
+    pub map: Vec<Vec<f32>>,
 }
 
 pub struct HeightMapMesh {
@@ -14,9 +17,9 @@ pub struct HeightMapMesh {
 }
 
 pub enum Algorithms {
-    FractalPerlin(heightmaps::perlin::FractalPerlinParams),
-    GradientFractalPerlin(heightmaps::perlin::GradientFractalPerlinParams),
-    DiffusionLimitedAggregation(heightmaps::dla::DiffusionLimitedAggregationParams),
+    FractalPerlin(perlin::FractalPerlinParams),
+    GradientFractalPerlin(perlin::GradientFractalPerlinParams),
+    DiffusionLimitedAggregation(dla::DiffusionLimitedAggregationParams),
 }
 
 impl HeightMap {
@@ -146,15 +149,15 @@ impl Add<HeightMap> for HeightMap {
     }
 }
 
-fn generate_fractal_perlin(params: heightmaps::perlin::FractalPerlinParams) -> HeightMap {
+fn generate_fractal_perlin(params: perlin::FractalPerlinParams) -> HeightMap {
     // let mut rng = rand::thread_rng();
     // let seed = rng.gen::<u32>();
-    let permutation = heightmaps::perlin::generate_permutation(params.seed);
+    let permutation = perlin::generate_permutation(params.seed);
 
     let mut hmap = HeightMap::new(params.width, params.height);
     for i in 0..params.height {
         for j in 0..params.width {
-            hmap.map[i][j] = heightmaps::perlin::octave_perlin3d(
+            hmap.map[i][j] = perlin::octave_perlin3d(
                 i as f32 / params.height as f32,
                 j as f32 / params.width as f32,
                 0.0,
@@ -170,11 +173,11 @@ fn generate_fractal_perlin(params: heightmaps::perlin::FractalPerlinParams) -> H
 }
 
 fn generate_gradient_frac_perlin(
-    params: heightmaps::perlin::GradientFractalPerlinParams,
+    params: perlin::GradientFractalPerlinParams,
 ) -> HeightMap {
     HeightMap::new(10, 10)
 }
 
-fn generate_diff_lim_agg(params: heightmaps::dla::DiffusionLimitedAggregationParams) -> HeightMap {
+fn generate_diff_lim_agg(params: dla::DiffusionLimitedAggregationParams) -> HeightMap {
     HeightMap::new(10, 10)
 }

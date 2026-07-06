@@ -1,5 +1,3 @@
-use lib;
-
 fn main() {
-    lib::run().unwrap();
+    procedural_terrain::run().unwrap();
 }

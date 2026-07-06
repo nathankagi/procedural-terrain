@@ -1,11 +1,12 @@
-use std::io::{BufRead, BufReader, Cursor};
-
-use anyhow::Ok;
 use cgmath::InnerSpace;
 use image;
+use std::io::{BufReader, Cursor};
+use std::path::Path;
 use wgpu::util::DeviceExt;
 
-use crate::{heightmaps, model, texture};
+use crate::model;
+use crate::render::texture;
+use crate::sim::r#gen::lib::HeightMapMesh;
 
 #[cfg(target_arch = "wasm32")]
 fn format_url(file_name: &str) -> reqwest::Url {
@@ -28,7 +29,7 @@ pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
     #[cfg(not(target_arch = "wasm32"))]
     let txt = {
         let path = std::path::Path::new(env!("OUT_DIR"))
-            .join("res")
+            .join("assets")
             .join(file_name);
         std::fs::read_to_string(path)?
     };
@@ -45,7 +46,7 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
     #[cfg(not(target_arch = "wasm32"))]
     let data = {
         let path = std::path::Path::new(env!("OUT_DIR"))
-            .join("res")
+            .join("assets")
             .join(file_name);
         std::fs::read(path)?
     };
@@ -67,7 +68,7 @@ pub async fn model_from_mesh(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
-    meshed: heightmaps::lib::HeightMapMesh,
+    meshed: HeightMapMesh,
 ) -> anyhow::Result<model::Model> {
     let vertices: Vec<model::ModelVertex> = meshed
         .vertices
@@ -260,19 +261,18 @@ pub async fn load_obj_model(
     let obj_cursor = Cursor::new(obj_text);
     let mut obj_reader = BufReader::new(obj_cursor);
 
-    let (models, obj_materials) = tobj::load_obj_buf_async(
+    let (models, obj_materials) = tobj::load_obj_buf(
         &mut obj_reader,
         &tobj::LoadOptions {
             triangulate: true,
             single_index: true,
             ..Default::default()
         },
-        |p| async move {
-            let mat_text = load_string(&p).await.unwrap();
+        |p: &Path| {
+            let mat_text = pollster::block_on(load_string(p.to_str().unwrap())).unwrap();
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
-    )
-    .await?;
+    )?;
 
     let mut materials = Vec::new();
     for m in obj_materials? {

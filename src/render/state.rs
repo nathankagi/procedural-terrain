@@ -1,3 +1,96 @@
+use std::{iter, sync::Arc};
+
+use super::camera;
+use super::model;
+use super::model::Vertex;
+use super::pipeline::create_render_pipeline;
+use super::texture;
+use crate::assets as resources;
+use cgmath::prelude::*;
+use wgpu::util::DeviceExt;
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::KeyCode;
+use winit::window::Window;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightUniform {
+    position: [f32; 3],
+    _padding: u32,
+    colour: [f32; 3],
+    _padding2: u32,
+}
+
+struct Instance {
+    position: cgmath::Vector3<f32>,
+    rotation: cgmath::Quaternion<f32>,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct InstanceRaw {
+    model: [[f32; 4]; 4],
+    normal: [[f32; 3]; 3],
+}
+
+impl Instance {
+    fn to_raw(&self) -> InstanceRaw {
+        InstanceRaw {
+            model: (cgmath::Matrix4::from_translation(self.position)
+                * cgmath::Matrix4::from(self.rotation))
+            .into(),
+            normal: cgmath::Matrix3::from(self.rotation).into(),
+        }
+    }
+}
+
+impl model::Vertex for InstanceRaw {
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 19]>() as wgpu::BufferAddress,
+                    shader_location: 10,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 22]>() as wgpu::BufferAddress,
+                    shader_location: 11,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
+    }
+}
+
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -5,7 +98,7 @@ pub struct State {
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
     render_pipeline: wgpu::RenderPipeline,
-    window: Arc<Window>,
+    pub(crate) window: Arc<Window>,
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: texture::Texture,
     depth_texture: texture::Texture,
@@ -25,7 +118,7 @@ pub struct State {
 }
 
 impl State {
-    async fn new(window: Arc<Window>) -> anyhow::Result<State> {
+    pub(crate) async fn new(window: Arc<Window>) -> anyhow::Result<State> {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -83,12 +176,12 @@ impl State {
             view_formats: vec![],
         };
 
-        let diffuse_bytes = include_bytes!(".././res/rainbow_gradient.png");
+        let diffuse_bytes = include_bytes!("../../assets/rainbow_gradient.png");
         let diffuse_texture = texture::Texture::from_bytes(
             &device,
             &queue,
             diffuse_bytes,
-            ".././res/rainbow_gradient.png",
+            "../assets/rainbow_gradient.png",
         )
         .unwrap();
 
@@ -223,7 +316,7 @@ impl State {
             });
             let shader = wgpu::ShaderModuleDescriptor {
                 label: Some("Light Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/light.wgsl").into()),
             };
             create_render_pipeline(
                 &device,
@@ -254,7 +347,7 @@ impl State {
         let render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
                 label: Some("Normal Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shader.wgsl").into()),
             };
 
             create_render_pipeline(
@@ -357,7 +450,7 @@ impl State {
         }
     }
 
-    fn update(&mut self) {
+    pub(crate) fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
         self.camera_uniform.update_view_proj(&self.camera);
         self.queue.write_buffer(
@@ -378,7 +471,7 @@ impl State {
         );
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub(crate) fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         self.window.request_redraw();
 
         if !self.is_surface_configured {
@@ -455,7 +548,12 @@ impl State {
         Ok(())
     }
 
-    fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+    pub(crate) fn handle_key(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        code: KeyCode,
+        is_pressed: bool,
+    ) {
         if code == KeyCode::Escape && is_pressed {
             event_loop.exit();
         } else {
