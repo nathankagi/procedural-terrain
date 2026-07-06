@@ -19,7 +19,7 @@ To generate terrain I've looked at a handlful of different algorithms but Perlin
 
 I had to do a little debugging, resolving the typical incorrect sign issues and so forth but in the end things looked okay. At the end of the day it was far easier to follow Ken Perlin's implementation directly, converting to Rust in this case of course, rather than interpreting some other blog. To visualise the data I used a PointList in bevy so get an initial view of the noise I was creating.
 
-![point_mesh](./resources/point_mesh.png "Point List Mesh")
+![point_mesh](./media/point_mesh.png "Point List Mesh")
 
 ### Meshing
 
@@ -27,7 +27,7 @@ Some of the newer Bevy [custom meshing](https://bevyengine.org/examples/3D%20Ren
 
 Initially I used only verticle normals, trying to get the lighting (both ambient and directional) working with this setup led to some interesting looking shadow behaviour that made the terrain look very strange. To get rid of these stange shadows I actually calculated the normal vectors using an answer on [stack overflow](https://stackoverflow.com/questions/6656358/calculating-normals-in-a-triangle-mesh). The calculation simplifies to calculating the height differences between the adjacent row and column points and the output looked much nicer.
 
-![mesh_triangles](./resources/triangle_mesh.png "Triangle List Mesh")
+![mesh_triangles](./media/triangle_mesh.png "Triangle List Mesh")
 
 There are still some issues with the lighting which become apparent on both very smooth and very hilly terrain. The smooth surfaces become very shiny and the sharper terrain becomes dull. This is due to the vertical scale factor in the normal vector calculation mentioned before.
 
@@ -37,7 +37,7 @@ let normal = Vector3::new(height_diff_x, 2.0, height_diff_z).normalize();
 
 Typically a value of 2 is suitable but in these extremes would need to be altered. Larger values are suited to flatter terrain keeping the normal vectors more vertical while smaller values are more suitable to more hilly terrain. This can be dynamically adjusted based on the height differentials but it isn't super necessary for this kind of simulation so I'll leave the value at 2 for now. It is also worth noting this seems more noticeable in the dimly lit scene I currently have, when increasing the light I found it much harder to notice.
 
-![triangle mesh light](./resources/triangle_mesh_light.png "Triangle List Mesh Lighter")
+![triangle mesh light](./media/triangle_mesh_light.png "Triangle List Mesh Lighter")
 
 With some tweaking of the noise generation, some ambient and directional light I was able to get a nice wavy terrain using the following config:
 
@@ -156,9 +156,9 @@ heightmap
 ```
 
 The result looks a little weird, I find the slower terrain to almost be slightly intoxicating.
-![fast changing terrain](./resources/1000x1000_fast.gif "1000x1000 Fast Rate")
+![fast changing terrain](./media/1000x1000_fast.gif "1000x1000 Fast Rate")
 
-![slow changing terrain](./resources/1000x1000_slow.gif "1000x1000 Slow Rate")
+![slow changing terrain](./media/1000x1000_slow.gif "1000x1000 Slow Rate")
 
 ## Improving Terrain Generation
 
@@ -208,8 +208,8 @@ fn absorbtion(t: f32, b: u32) -> f32 {
 
 Extra initial particles can be used to start clusters in multiple locations and even complex shapes can be used to author more distinct terrain.
 
-![3-point DLA](./resources/dla_3_points.jpg "3-Point DLA")
-![multi-point DLA](./resources/dla_multi_points.jpg "Multi-Point DLA")
+![3-point DLA](./media/dla_3_points.jpg "3-Point DLA")
+![multi-point DLA](./media/dla_multi_points.jpg "Multi-Point DLA")
 
 I've found the clusters seem to avoid each other for some reason.
 
@@ -277,8 +277,8 @@ For the next steps of DLA, this hashmap of points also needs to be scalable. At 
 2   3   4
 ```
 
-![square-artefacts](./resources/layer_7_particle_sq.jpg "Layer 7 Particle Map - Square")
-![square-diag-artefacts](./resources/layer_7_particle.jpg "Layer 7 Particle Map")
+![square-artefacts](./media/layer_7_particle_sq.jpg "Layer 7 Particle Map - Square")
+![square-diag-artefacts](./media/layer_7_particle.jpg "Layer 7 Particle Map")
 
 A fix that helps remove some of these artefacts is "nudging" the connecting particle to a nearby pixel that still connects the two particles. I am yet to implement this though as I need to include more checks (circular referencing issue) to prevent the application crashing if the new particle exists. This is not the simplest because of how the tree traversal is computed when scaling the particle map. On the plus side, the height map, once filtered, looks reasonable without this addition.
 
@@ -286,11 +286,11 @@ Note: The height evaluation is still buggy and I plan to revisit it. Like many t
 
 Scaling of the heightmap is similarly simple but slightly different. With a scaling factor of 2, any single point on the heightmap translates to 4 on the scaled heightmap. Filtering is a convolution operation between some filter kernel and the heightmap itself. So far I've only tested gaussian kernel convolutions but I'd like to test other things too. The resulting heightmap looks, as expected, like a blurry version of the particle trees.
 
-![filtered-heightmap](./resources/layer_7_heightmap_base.jpg "Layer 7 Heightmap")
+![filtered-heightmap](./media/layer_7_heightmap_base.jpg "Layer 7 Heightmap")
 
 Additional details is then added after the particle tree has been expanded.
 
-![detailed-heightmap](./resources/layer_7_heightmap_detailed.jpg "Layer 7 Heightmap Detailed")
+![detailed-heightmap](./media/layer_7_heightmap_detailed.jpg "Layer 7 Heightmap Detailed")
 
 As mentioned before, the kernel parameters and how they scale with the size of the map heavily impact how nice the resulting terrain looks. Some parameters producing some really weird outputs. It is possible to see discrete square chunks in the final heightmap output. I suspect these are mostly due to how the kernel parameters are scaled.
 
@@ -302,7 +302,7 @@ While the algorithm is not totally complete, efficient or free of major bugs and
 
 In the same way fractal perlin noise is run over multiple octaves allowing for sharper detail to be added to the map with lower amplitude, I'd like to try convert the DLA algorithm into something similar. In fact just adding a perlin noise map works quite nicely at adding a little more variety in the overall DLA map.
 
-![dla-perlin-heightmap](./resources/dla_perlin.png "Perlin & DLA")
+![dla-perlin-heightmap](./media/dla_perlin.png "Perlin & DLA")
 
 A large downside of this linked particle system is that providing manually authored starting images is a little more tricky as the particle links must also be defined. I'd like to implement an image-based DLA generator so I can use a tool like paint to provide a starting point for some custom and slightly more reproducable models. I believe it would be possible if all edge particles have a value of 1, all others with a value of 0. Then for each non-edge particle taking the max of any surrounding particles +1. My concern is that this will bias towards a sharper tree in more dense maps. This is because a particle will look at each surrounding particle instead of each linked particle. This however would allow for easier mapping of custom images as now edge particles must be defined. It would also be possible then to start with an edge particle placement to randomly seed the lowest sections of the terrain before starting the DLA algorithm.
 

@@ -1,3 +1,5 @@
 target/
-*.csv
 /outputs/
+
+*.csv
+.DS_Store
