@@ -1,4 +1,5 @@
 pub mod camera;
+pub mod instance;
 pub mod model;
 pub mod pipeline;
 pub mod state;
