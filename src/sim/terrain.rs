@@ -1,16 +1,3 @@
-pub struct MaterialRegistry {
-    materials: Vec<Material>,
-}
-
-#[derive(Copy, Clone, PartialEq)]
-pub struct Material {
-    pub erosion: f32,
-    pub cohesion: f32,
-    pub saturation: f32,
-    pub permeability: f32,
-    pub mass: f32,
-}
-
 #[derive(Copy, Clone)]
 pub struct Layer {
     thickness: f32,
@@ -56,12 +43,6 @@ impl Terrain {
 
     pub fn extract_heights(&self) -> Vec<f32> {
         self.cells.iter().map(|c| c.total_height()).collect()
-    }
-}
-
-impl MaterialRegistry {
-    pub fn get(&self, id: u16) -> &Material {
-        &self.materials[id as usize]
     }
 }
 
@@ -141,18 +122,6 @@ impl Default for Layer {
         Layer {
             thickness: 0.0,
             material_id: 0u16,
-        }
-    }
-}
-
-impl Default for Material {
-    fn default() -> Self {
-        Material {
-            erosion: 0.0,
-            cohesion: 0.0,
-            saturation: 0.0,
-            permeability: 0.0,
-            mass: 0.0,
         }
     }
 }

@@ -1,6 +1,6 @@
 use image::{GrayImage, Luma, Rgb, RgbImage};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, error, info, log_enabled, Level};
+use log::{Level, debug, error, info, log_enabled};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
@@ -528,7 +528,7 @@ fn random_particle(height: u32, width: u32, map: &HashMap<(u32, u32), Particle>)
                 }
 
                 if i > 10000 {
-                    error!("Particle failed to find new spot");
+                    error!("Particle failed to find new spot.");
                     return Point::new(0, 0);
                 }
                 i = i + 1;

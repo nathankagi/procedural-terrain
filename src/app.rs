@@ -97,6 +97,11 @@ impl ApplicationHandler<State> for App {
             None => return,
         };
 
+        // Let the state (UI) consume the event first, if it wants to.
+        if state.handle_event(&event) {
+            return;
+        }
+
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),

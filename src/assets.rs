@@ -127,7 +127,7 @@ pub async fn model_from_mesh(
     })
 }
 
-pub async fn load_png_model(
+pub async fn load_heightmap_png(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,

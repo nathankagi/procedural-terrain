@@ -1,4 +1,4 @@
-use std::{iter, ops::Range, sync::Arc};
+use std::{collections::HashMap, iter, ops::Range, sync::Arc, time::Instant};
 
 use super::camera;
 use super::instance::{Instance, InstanceRaw};
@@ -6,7 +6,7 @@ use super::model;
 use super::model::{DrawLight, DrawModel, Vertex};
 use super::pipeline::create_render_pipeline;
 use super::texture;
-use crate::assets as resources;
+use crate::assets;
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
@@ -22,8 +22,16 @@ struct LightUniform {
     _padding2: u32,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PipelineId(pub usize);
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MaterialId(pub usize);
+
 struct SceneObject {
     model_index: usize,
+    pipeline_id: PipelineId,
+    material_id: Option<MaterialId>,
     instance_range: Range<u32>,
 }
 
@@ -33,10 +41,8 @@ pub struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
-    render_pipeline: wgpu::RenderPipeline,
+    render_pipelines: Vec<wgpu::RenderPipeline>,
     pub(crate) window: Arc<Window>,
-    diffuse_bind_group: wgpu::BindGroup,
-    diffuse_texture: texture::Texture,
     depth_texture: texture::Texture,
     camera: camera::Camera,
     camera_uniform: camera::CameraUniform,
@@ -46,12 +52,16 @@ pub struct State {
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     models: Vec<model::Model>,
+    models_by_name: HashMap<String, usize>,
+    materials: Vec<model::Material>,
     scene_objects: Vec<SceneObject>,
     light_model: model::Model,
     light_uniform: LightUniform,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
     light_render_pipeline: wgpu::RenderPipeline,
+    last_frame_time: Instant,
+    fps: f32,
 }
 
 impl State {
@@ -113,15 +123,6 @@ impl State {
             view_formats: vec![],
         };
 
-        let diffuse_bytes = include_bytes!("../../assets/rainbow_gradient.png");
-        let diffuse_texture = texture::Texture::from_bytes(
-            &device,
-            &queue,
-            diffuse_bytes,
-            "../assets/rainbow_gradient.png",
-        )
-        .unwrap();
-
         let depth_texture =
             texture::Texture::create_depth_texture(&device, &config, "depth_texture");
 
@@ -147,21 +148,6 @@ impl State {
                 ],
                 label: Some("texture_bind_group_layout"),
             });
-
-        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
-                },
-            ],
-            label: Some("diffuse_bind_group"),
-        });
 
         let camera = camera::Camera {
             eye: (0.0, 1.0, 2.0).into(),
@@ -266,7 +252,7 @@ impl State {
         };
 
         let light_model =
-            resources::load_obj_model(&"cube.obj", &device, &queue, &texture_bind_group_layout)
+            assets::load_obj_model(&"cube.obj", &device, &queue, &texture_bind_group_layout)
                 .await
                 .unwrap();
 
@@ -296,6 +282,8 @@ impl State {
                 shader,
             )
         };
+
+        let render_pipelines = vec![render_pipeline];
 
         let instances = vec![Instance::new(
             cgmath::Vector3::new(0.0, 0.0, 0.0),
@@ -338,13 +326,36 @@ impl State {
         // .unwrap();
 
         let terrain_model =
-            resources::load_png_model("test_map.png", &device, &queue, &texture_bind_group_layout)
+            assets::load_heightmap_png("test_map.png", &device, &queue, &texture_bind_group_layout)
                 .await
                 .unwrap();
 
-        let models = vec![terrain_model];
+        let mut models = Vec::new();
+        let mut materials = Vec::new();
+        let mut models_by_name = HashMap::new();
+
+        let mut terrain_model = terrain_model;
+        let material_map: Vec<usize> = terrain_model
+            .materials
+            .drain(..)
+            .enumerate()
+            .map(|(index, material)| {
+                materials.push(material);
+                index
+            })
+            .collect();
+
+        for mesh in terrain_model.meshes.iter_mut() {
+            mesh.material = material_map[mesh.material];
+        }
+
+        models_by_name.insert("terrain".to_string(), 0);
+        models.push(terrain_model);
+
         let scene_objects = vec![SceneObject {
             model_index: 0,
+            pipeline_id: PipelineId(0),
+            material_id: Some(MaterialId(0)),
             instance_range: 0..instances.len() as u32,
         }];
 
@@ -355,9 +366,7 @@ impl State {
             config,
             is_surface_configured: false,
             window,
-            render_pipeline,
-            diffuse_bind_group,
-            diffuse_texture,
+            render_pipelines,
             depth_texture,
             camera,
             camera_uniform,
@@ -367,12 +376,16 @@ impl State {
             instances,
             instance_buffer,
             models,
+            models_by_name,
+            materials,
             scene_objects,
             light_model,
             light_uniform,
             light_buffer,
             light_bind_group,
             light_render_pipeline,
+            last_frame_time: Instant::now(),
+            fps: 0.0,
         })
     }
 
@@ -410,6 +423,11 @@ impl State {
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
 
+        let now = Instant::now();
+        let frame_duration = now - self.last_frame_time;
+        self.last_frame_time = now;
+        self.fps = 1.0 / frame_duration.as_secs_f32().max(f32::EPSILON);
+
         let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
         self.light_uniform.position =
             (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(0.5))
@@ -421,15 +439,42 @@ impl State {
             bytemuck::cast_slice(&[self.light_uniform]),
         );
         self.sync_instance_buffer();
+
+        // handle event
     }
 
-    pub fn add_scene_object(&mut self, model_index: usize, instance: Instance) {
+    pub(crate) fn handle_event(&mut self, _event: &winit::event::WindowEvent) -> bool {
+        // consume event
+        false
+    }
+
+    pub fn add_scene_object(
+        &mut self,
+        model_index: usize,
+        pipeline_id: PipelineId,
+        material_id: Option<MaterialId>,
+        instance: Instance,
+    ) {
         let start = self.instances.len() as u32;
         self.instances.push(instance);
         self.scene_objects.push(SceneObject {
             model_index,
+            pipeline_id,
+            material_id,
             instance_range: start..start + 1,
         });
+    }
+
+    pub fn add_scene_object_by_name(
+        &mut self,
+        model_name: &str,
+        pipeline_id: PipelineId,
+        material_id: Option<MaterialId>,
+        instance: Instance,
+    ) {
+        if let Some(&model_index) = self.models_by_name.get(model_name) {
+            self.add_scene_object(model_index, pipeline_id, material_id, instance);
+        }
     }
 
     pub(crate) fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -481,8 +526,6 @@ impl State {
             });
 
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
             render_pass.set_pipeline(&self.light_render_pipeline);
@@ -492,14 +535,25 @@ impl State {
                 &self.light_bind_group,
             );
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+
             for object in &self.scene_objects {
-                render_pass.draw_model_instanced(
-                    &self.models[object.model_index],
-                    object.instance_range.clone(),
-                    &self.camera_bind_group,
-                    &self.light_bind_group,
-                );
+                render_pass.set_pipeline(&self.render_pipelines[object.pipeline_id.0]);
+                let model = &self.models[object.model_index];
+                for mesh in &model.meshes {
+                    let material_index = object.material_id.map(|id| id.0).unwrap_or(mesh.material);
+                    let material = &self.materials[material_index];
+                    render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                    render_pass
+                        .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.set_bind_group(0, &material.bind_group, &[]);
+                    render_pass.set_bind_group(2, &self.light_bind_group, &[]);
+                    render_pass.draw_indexed(
+                        0..mesh.num_elements,
+                        0,
+                        object.instance_range.clone(),
+                    );
+                }
             }
         }
 
