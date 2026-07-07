@@ -389,7 +389,11 @@ impl State {
     }
 
     fn sync_instance_buffer(&mut self) {
-        let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_data = self
+            .instances
+            .iter()
+            .map(Instance::to_raw)
+            .collect::<Vec<_>>();
         self.queue.write_buffer(
             &self.instance_buffer,
             0,
