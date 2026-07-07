@@ -6,6 +6,7 @@ use super::model;
 use super::model::{DrawLight, DrawModel, Vertex};
 use super::pipeline::create_render_pipeline;
 use super::texture;
+use super::validation;
 use crate::assets;
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
@@ -15,7 +16,7 @@ use winit::window::Window;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct LightUniform {
+pub struct LightUniform {
     position: [f32; 3],
     _padding: u32,
     colour: [f32; 3],
@@ -536,6 +537,8 @@ impl State {
             );
 
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+
+            validation::validate_uniform_struct_sizes();
 
             for object in &self.scene_objects {
                 render_pass.set_pipeline(&self.render_pipelines[object.pipeline_id.0]);
