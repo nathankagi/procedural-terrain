@@ -12,7 +12,9 @@ anyhow = "1"
 
 [dependencies]
 wgpu = "29"
-egui = "0.39"
+egui = "0.35"
+egui-wgpu = "0.35"
+egui-winit = "0.35"
 winit = "0.30"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "0.3"

@@ -1,3 +1,5 @@
+use std::os::raw;
+use std::time::Instant;
 use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use super::camera;
@@ -13,6 +15,8 @@ use wgpu::util::DeviceExt;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
+
+const GUI_UPDATE_RATE: f32 = 1.0 / 60.0;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -63,6 +67,13 @@ struct RenderState {
     scene_objects: Vec<SceneObject>,
 }
 
+struct GuiState {
+    egui_ctx: egui::Context,
+    egui_state: egui_winit::State,
+    egui_renderer: egui_wgpu::Renderer,
+    last_update_time: Instant,
+}
+
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -73,6 +84,9 @@ pub struct State {
     camera: CameraState,
     render: RenderState,
     light: LightState,
+    gui_state: GuiState,
+    last_frame_time: Instant,
+    fps: f32,
 }
 
 impl State {
@@ -403,6 +417,26 @@ impl State {
             scene_objects,
         };
 
+        let egui_ctx = egui::Context::default();
+
+        let gui_state = GuiState {
+            egui_ctx: egui_ctx.clone(),
+            egui_state: egui_winit::State::new(
+                egui_ctx.clone(),
+                egui::ViewportId::ROOT,
+                &window,
+                Some(window.scale_factor() as f32),
+                None,
+                None,
+            ),
+            egui_renderer: egui_wgpu::Renderer::new(
+                &device,
+                config.format,
+                egui_wgpu::RendererOptions::default(),
+            ),
+            last_update_time: Instant::now(),
+        };
+
         let mut state = Self {
             surface,
             device,
@@ -413,6 +447,9 @@ impl State {
             camera: camera_state,
             render: render_state,
             light: light_state,
+            gui_state: gui_state,
+            last_frame_time: Instant::now(),
+            fps: 0.0,
         };
 
         state.resize(size.width, size.height);
@@ -448,6 +485,19 @@ impl State {
     }
 
     pub(crate) fn update(&mut self) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_frame_time).as_secs_f32();
+        self.last_frame_time = now;
+
+        let gui_dt = now
+            .duration_since(self.gui_state.last_update_time)
+            .as_secs_f32();
+        if gui_dt > GUI_UPDATE_RATE {
+            self.gui_state.last_update_time = now;
+
+            self.fps = 1.0 / dt;
+        }
+
         self.camera
             .camera_controller
             .update_camera(&mut self.camera.camera);
@@ -475,8 +525,12 @@ impl State {
         // handle event
     }
 
-    pub(crate) fn handle_event(&mut self, _event: &winit::event::WindowEvent) -> bool {
-        false
+    pub(crate) fn handle_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+        let response = self
+            .gui_state
+            .egui_state
+            .on_window_event(&self.window, event);
+        response.consumed
     }
 
     pub fn add_scene_object(
@@ -601,6 +655,74 @@ impl State {
                     );
                 }
             }
+        }
+
+        let raw_input = self.gui_state.egui_state.take_egui_input(&self.window);
+        let egui_output = self.gui_state.egui_ctx.run_ui(raw_input, |ctx| {
+            egui::Window::new("Debug")
+                .default_pos((10.0, 10.0))
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.label(format!("FPS: {:.2}", self.fps));
+                });
+        });
+
+        self.gui_state
+            .egui_state
+            .handle_platform_output(&self.window, egui_output.platform_output);
+        let tris = self
+            .gui_state
+            .egui_ctx
+            .tessellate(egui_output.shapes, egui_output.pixels_per_point);
+        for (id, image_delta) in &egui_output.textures_delta.set {
+            self.gui_state.egui_renderer.update_texture(
+                &self.device,
+                &self.queue,
+                *id,
+                image_delta,
+            );
+        }
+
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: egui_output.pixels_per_point,
+        };
+
+        self.gui_state.egui_renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &tris,
+            &screen_descriptor,
+        );
+
+        {
+            let egui_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("egui pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+
+            self.gui_state.egui_renderer.render(
+                &mut egui_pass.forget_lifetime(),
+                &tris,
+                &screen_descriptor,
+            );
+        }
+
+        for id in &egui_output.textures_delta.free {
+            self.gui_state.egui_renderer.free_texture(id);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
