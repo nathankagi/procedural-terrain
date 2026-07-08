@@ -1,9 +1,9 @@
-use std::{collections::HashMap, iter, ops::Range, sync::Arc, time::Instant};
+use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use super::camera;
 use super::instance::{Instance, InstanceRaw};
 use super::model;
-use super::model::{DrawLight, DrawModel, Vertex};
+use super::model::{DrawLight, Vertex};
 use super::pipeline::create_render_pipeline;
 use super::texture;
 use super::validation;
@@ -36,33 +36,43 @@ struct SceneObject {
     instance_range: Range<u32>,
 }
 
-pub struct State {
-    surface: wgpu::Surface<'static>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    is_surface_configured: bool,
-    render_pipelines: Vec<wgpu::RenderPipeline>,
-    pub(crate) window: Arc<Window>,
-    depth_texture: texture::Texture,
+struct CameraState {
     camera: camera::Camera,
     camera_uniform: camera::CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     camera_controller: camera::CameraController,
+}
+
+struct LightState {
+    light_uniform: LightUniform,
+    light_buffer: wgpu::Buffer,
+    light_bind_group: wgpu::BindGroup,
+    light_render_pipeline: wgpu::RenderPipeline,
+    light_model: model::Model,
+}
+
+struct RenderState {
+    render_pipelines: Vec<wgpu::RenderPipeline>,
+    depth_texture: texture::Texture,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     models: Vec<model::Model>,
     models_by_name: HashMap<String, usize>,
     materials: Vec<model::Material>,
     scene_objects: Vec<SceneObject>,
-    light_model: model::Model,
-    light_uniform: LightUniform,
-    light_buffer: wgpu::Buffer,
-    light_bind_group: wgpu::BindGroup,
-    light_render_pipeline: wgpu::RenderPipeline,
-    last_frame_time: Instant,
-    fps: f32,
+}
+
+pub struct State {
+    surface: wgpu::Surface<'static>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    is_surface_configured: bool,
+    pub(crate) window: Arc<Window>,
+    camera: CameraState,
+    render: RenderState,
+    light: LightState,
 }
 
 impl State {
@@ -71,12 +81,15 @@ impl State {
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
             backends: wgpu::Backends::GL,
-            ..Default::default()
+            flags: wgpu::InstanceFlags::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            display: None,
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
         });
 
         let surface = instance.create_surface(window.clone()).unwrap();
@@ -155,9 +168,9 @@ impl State {
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_y(),
             aspect: config.width as f32 / config.height as f32,
-            fovy: 45.0,
+            fovy: 100.0,
             znear: 0.1,
-            zfar: 100.0,
+            zfar: 500.0,
         };
 
         let mut camera_uniform = camera::CameraUniform::new();
@@ -235,7 +248,10 @@ impl State {
         let light_render_pipeline = {
             let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Light Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
+                bind_group_layouts: &[
+                    Some(&camera_bind_group_layout),
+                    Some(&light_bind_group_layout),
+                ],
                 immediate_size: 0,
             });
             let shader = wgpu::ShaderModuleDescriptor {
@@ -261,9 +277,9 @@ impl State {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("render_pipeline_layout"),
                 bind_group_layouts: &[
-                    &texture_bind_group_layout,
-                    &camera_bind_group_layout,
-                    &light_bind_group_layout,
+                    Some(&texture_bind_group_layout),
+                    Some(&camera_bind_group_layout),
+                    Some(&light_bind_group_layout),
                 ],
                 immediate_size: 0,
             });
@@ -360,34 +376,49 @@ impl State {
             instance_range: 0..instances.len() as u32,
         }];
 
-        Ok(Self {
-            surface,
-            device,
-            queue,
-            config,
-            is_surface_configured: false,
-            window,
-            render_pipelines,
-            depth_texture,
+        let camera_state = CameraState {
             camera,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
             camera_controller,
+        };
+
+        let light_state = LightState {
+            light_uniform,
+            light_buffer,
+            light_bind_group,
+            light_render_pipeline,
+            light_model,
+        };
+
+        let render_state = RenderState {
+            render_pipelines,
+            depth_texture,
             instances,
             instance_buffer,
             models,
             models_by_name,
             materials,
             scene_objects,
-            light_model,
-            light_uniform,
-            light_buffer,
-            light_bind_group,
-            light_render_pipeline,
-            last_frame_time: Instant::now(),
-            fps: 0.0,
-        })
+        };
+
+        let mut state = Self {
+            surface,
+            device,
+            queue,
+            config,
+            is_surface_configured: false,
+            window,
+            camera: camera_state,
+            render: render_state,
+            light: light_state,
+        };
+
+        state.resize(size.width, size.height);
+        state.window.request_redraw();
+
+        Ok(state)
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -397,47 +428,47 @@ impl State {
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
 
-            self.depth_texture =
+            self.render.depth_texture =
                 texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
         }
     }
 
     fn sync_instance_buffer(&mut self) {
         let instance_data = self
+            .render
             .instances
             .iter()
             .map(Instance::to_raw)
             .collect::<Vec<_>>();
         self.queue.write_buffer(
-            &self.instance_buffer,
+            &self.render.instance_buffer,
             0,
             bytemuck::cast_slice(&instance_data),
         );
     }
 
     pub(crate) fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
+        self.camera
+            .camera_controller
+            .update_camera(&mut self.camera.camera);
+        self.camera
+            .camera_uniform
+            .update_view_proj(&self.camera.camera);
         self.queue.write_buffer(
-            &self.camera_buffer,
+            &self.camera.camera_buffer,
             0,
-            bytemuck::cast_slice(&[self.camera_uniform]),
+            bytemuck::cast_slice(&[self.camera.camera_uniform]),
         );
 
-        let now = Instant::now();
-        let frame_duration = now - self.last_frame_time;
-        self.last_frame_time = now;
-        self.fps = 1.0 / frame_duration.as_secs_f32().max(f32::EPSILON);
-
-        let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
-        self.light_uniform.position =
+        let old_position: cgmath::Vector3<_> = self.light.light_uniform.position.into();
+        self.light.light_uniform.position =
             (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(0.5))
                 * old_position)
                 .into();
         self.queue.write_buffer(
-            &self.light_buffer,
+            &self.light.light_buffer,
             0,
-            bytemuck::cast_slice(&[self.light_uniform]),
+            bytemuck::cast_slice(&[self.light.light_uniform]),
         );
         self.sync_instance_buffer();
 
@@ -445,7 +476,6 @@ impl State {
     }
 
     pub(crate) fn handle_event(&mut self, _event: &winit::event::WindowEvent) -> bool {
-        // consume event
         false
     }
 
@@ -456,9 +486,9 @@ impl State {
         material_id: Option<MaterialId>,
         instance: Instance,
     ) {
-        let start = self.instances.len() as u32;
-        self.instances.push(instance);
-        self.scene_objects.push(SceneObject {
+        let start = self.render.instances.len() as u32;
+        self.render.instances.push(instance);
+        self.render.scene_objects.push(SceneObject {
             model_index,
             pipeline_id,
             material_id,
@@ -473,20 +503,33 @@ impl State {
         material_id: Option<MaterialId>,
         instance: Instance,
     ) {
-        if let Some(&model_index) = self.models_by_name.get(model_name) {
+        if let Some(&model_index) = self.render.models_by_name.get(model_name) {
             self.add_scene_object(model_index, pipeline_id, material_id, instance);
         }
     }
 
-    pub(crate) fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub(crate) fn render(&mut self) -> anyhow::Result<()> {
         self.window.request_redraw();
 
         if !self.is_surface_configured {
             return Ok(());
         }
 
-        let output = self.surface.get_current_texture()?;
-        let view = output
+        let output = self.surface.get_current_texture();
+        let surface_texture = match output {
+            wgpu::CurrentSurfaceTexture::Success(surface_texture)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+            wgpu::CurrentSurfaceTexture::Timeout => return Ok(()),
+            wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface.configure(&self.device, &self.config);
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Validation => {
+                return Err(anyhow::anyhow!("Surface texture unavailable"));
+            }
+        };
+        let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -514,7 +557,7 @@ impl State {
                     depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
+                    view: &self.render.depth_texture.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Store,
@@ -526,31 +569,31 @@ impl State {
                 multiview_mask: None,
             });
 
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(1, self.render.instance_buffer.slice(..));
+            render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
 
-            render_pass.set_pipeline(&self.light_render_pipeline);
+            render_pass.set_pipeline(&self.light.light_render_pipeline);
             render_pass.draw_light_model(
-                &self.light_model,
-                &self.camera_bind_group,
-                &self.light_bind_group,
+                &self.light.light_model,
+                &self.camera.camera_bind_group,
+                &self.light.light_bind_group,
             );
 
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
 
             validation::validate_uniform_struct_sizes();
 
-            for object in &self.scene_objects {
-                render_pass.set_pipeline(&self.render_pipelines[object.pipeline_id.0]);
-                let model = &self.models[object.model_index];
+            for object in &self.render.scene_objects {
+                render_pass.set_pipeline(&self.render.render_pipelines[object.pipeline_id.0]);
+                let model = &self.render.models[object.model_index];
                 for mesh in &model.meshes {
                     let material_index = object.material_id.map(|id| id.0).unwrap_or(mesh.material);
-                    let material = &self.materials[material_index];
+                    let material = &self.render.materials[material_index];
                     render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                     render_pass
                         .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                     render_pass.set_bind_group(0, &material.bind_group, &[]);
-                    render_pass.set_bind_group(2, &self.light_bind_group, &[]);
+                    render_pass.set_bind_group(2, &self.light.light_bind_group, &[]);
                     render_pass.draw_indexed(
                         0..mesh.num_elements,
                         0,
@@ -560,8 +603,8 @@ impl State {
             }
         }
 
-        self.queue.submit(iter::once(encoder.finish()));
-        output.present();
+        self.queue.submit(std::iter::once(encoder.finish()));
+        surface_texture.present();
 
         Ok(())
     }
@@ -575,7 +618,7 @@ impl State {
         if code == KeyCode::Escape && is_pressed {
             event_loop.exit();
         } else {
-            self.camera_controller.handle_key(code, is_pressed);
+            self.camera.camera_controller.handle_key(code, is_pressed);
         }
     }
 }

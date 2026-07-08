@@ -1,7 +1,7 @@
 use std::ops::Add;
 
-use cgmath::{InnerSpace, Vector3};
 use super::{dla, perlin};
+use cgmath::{InnerSpace, Vector3};
 
 const NORMAL_Y_COMPONENT: f32 = 2.0;
 
@@ -172,9 +172,7 @@ fn generate_fractal_perlin(params: perlin::FractalPerlinParams) -> HeightMap {
     return hmap;
 }
 
-fn generate_gradient_frac_perlin(
-    params: perlin::GradientFractalPerlinParams,
-) -> HeightMap {
+fn generate_gradient_frac_perlin(params: perlin::GradientFractalPerlinParams) -> HeightMap {
     HeightMap::new(10, 10)
 }
 

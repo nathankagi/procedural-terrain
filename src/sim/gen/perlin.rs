@@ -185,7 +185,7 @@ pub fn generate_permutation(seed: u32) -> Vec<i32> {
         s ^= s << 13;
         s ^= s >> 7;
         s ^= s << 17;
-        
+
         let j = (s as usize) % (i + 1);
         p.swap(i, j);
     }
