@@ -1,5 +1,3 @@
-use procedural_terrain::run;
-
 fn main() {
-    run().unwrap();
+    procedural_terrain::run().unwrap();
 }
