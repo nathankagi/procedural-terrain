@@ -5,6 +5,7 @@ use std::path::Path;
 use wgpu::util::DeviceExt;
 
 use crate::model;
+use crate::render::scene::MaterialHandle;
 use crate::render::texture;
 use crate::sim::r#gen::lib::HeightMapMesh;
 
@@ -69,6 +70,7 @@ pub async fn model_from_mesh(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
     meshed: HeightMapMesh,
+    materials: &mut Vec<model::Material>,
 ) -> anyhow::Result<model::Model> {
     let vertices: Vec<model::ModelVertex> = meshed
         .vertices
@@ -111,18 +113,20 @@ pub async fn model_from_mesh(
         label: None,
     });
 
+    let material = MaterialHandle(materials.len());
+    materials.push(model::Material {
+        name: file_name.to_string(),
+        diffuse_texture,
+        bind_group,
+    });
+
     Ok(model::Model {
         meshes: vec![model::Mesh {
             name: file_name.to_string(),
             vertex_buffer,
             index_buffer,
             num_elements: meshed.indices.len() as u32,
-            material: 0,
-        }],
-        materials: vec![model::Material {
-            name: file_name.to_string(),
-            diffuse_texture: diffuse_texture,
-            bind_group: bind_group,
+            material,
         }],
     })
 }
@@ -132,6 +136,7 @@ pub async fn load_heightmap_png(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
+    materials: &mut Vec<model::Material>,
 ) -> anyhow::Result<model::Model> {
     let png_data = load_binary(file_name).await?;
 
@@ -235,18 +240,20 @@ pub async fn load_heightmap_png(
         label: None,
     });
 
+    let material = MaterialHandle(materials.len());
+    materials.push(model::Material {
+        name: file_name.to_string(),
+        diffuse_texture,
+        bind_group,
+    });
+
     Ok(model::Model {
         meshes: vec![model::Mesh {
             name: file_name.to_string(),
             vertex_buffer,
             index_buffer,
             num_elements: indices.len() as u32,
-            material: 0,
-        }],
-        materials: vec![model::Material {
-            name: file_name.to_string(),
-            diffuse_texture: diffuse_texture,
-            bind_group: bind_group,
+            material,
         }],
     })
 }
@@ -256,6 +263,7 @@ pub async fn load_obj_model(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
+    materials: &mut Vec<model::Material>,
 ) -> anyhow::Result<model::Model> {
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
@@ -274,7 +282,7 @@ pub async fn load_obj_model(
         },
     )?;
 
-    let mut materials = Vec::new();
+    let mut material_handles = Vec::new();
     for m in obj_materials? {
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -292,12 +300,14 @@ pub async fn load_obj_model(
             label: None,
         });
 
+        material_handles.push(MaterialHandle(materials.len()));
         materials.push(model::Material {
             name: m.name,
             diffuse_texture,
             bind_group,
-        })
+        });
     }
+    let default_material = material_handles.first().copied();
 
     let meshes = models
         .into_iter()
@@ -354,10 +364,15 @@ pub async fn load_obj_model(
                 vertex_buffer,
                 index_buffer,
                 num_elements: m.mesh.indices.len() as u32,
-                material: m.mesh.material_id.unwrap_or(0),
+                material: m
+                    .mesh
+                    .material_id
+                    .and_then(|id| material_handles.get(id).copied())
+                    .or(default_material)
+                    .expect("obj model has no materials"),
             }
         })
         .collect::<Vec<_>>();
 
-    Ok(model::Model { meshes, materials })
+    Ok(model::Model { meshes })
 }

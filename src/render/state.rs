@@ -1,14 +1,14 @@
 use std::os::raw;
+use std::sync::Arc;
 use std::time::Instant;
-use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use super::camera;
-use super::instance::{Instance, InstanceRaw};
 use super::model;
 use super::model::{DrawLight, Vertex};
 use super::pipeline::create_render_pipeline;
+use super::scene::{self, MaterialHandle, ModelHandle, Object, PipelineHandle, Registry};
 use super::texture;
-use super::validation;
+use super::transform::{Transform, TransformRaw};
 use crate::assets;
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
@@ -16,7 +16,8 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
 
-const GUI_UPDATE_RATE: f32 = 1.0 / 60.0;
+const GUI_UPDATE_RATE: f32 = 1.0 / 2.0;
+const LIGHT_ORBIT_DEG_PER_SEC: f32 = 15.0;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -25,19 +26,6 @@ pub struct LightUniform {
     _padding: u32,
     colour: [f32; 3],
     _padding2: u32,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct PipelineId(pub usize);
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MaterialId(pub usize);
-
-struct SceneObject {
-    model_index: usize,
-    pipeline_id: PipelineId,
-    material_id: Option<MaterialId>,
-    instance_range: Range<u32>,
 }
 
 struct CameraState {
@@ -58,13 +46,14 @@ struct LightState {
 
 struct RenderState {
     render_pipelines: Vec<wgpu::RenderPipeline>,
+    pipeline_registry: Registry<PipelineHandle>,
     depth_texture: texture::Texture,
-    instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
+    instance_capacity: u32,
     models: Vec<model::Model>,
-    models_by_name: HashMap<String, usize>,
+    model_registry: Registry<ModelHandle>,
     materials: Vec<model::Material>,
-    scene_objects: Vec<SceneObject>,
+    material_registry: Registry<MaterialHandle>,
 }
 
 struct GuiState {
@@ -81,12 +70,43 @@ pub struct State {
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
     pub(crate) window: Arc<Window>,
+    scene: scene::Scene,
     camera: CameraState,
     render: RenderState,
     light: LightState,
     gui_state: GuiState,
     last_frame_time: Instant,
     fps: f32,
+}
+
+fn create_instance_buffer(device: &wgpu::Device, capacity: u32) -> wgpu::Buffer {
+    let capacity = capacity.max(1) as u64;
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Instance Buffer"),
+        size: capacity * std::mem::size_of::<TransformRaw>() as u64,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+fn sync_instance_buffer(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    buffer: &mut wgpu::Buffer,
+    capacity: &mut u32,
+    instances: &[TransformRaw],
+) {
+    if instances.is_empty() {
+        return;
+    }
+
+    let required = instances.len() as u32;
+    if required > *capacity {
+        let new_capacity = required.max(capacity.saturating_mul(2));
+        *buffer = create_instance_buffer(device, new_capacity);
+        *capacity = new_capacity;
+    }
+    queue.write_buffer(buffer, 0, bytemuck::cast_slice(instances));
 }
 
 impl State {
@@ -140,12 +160,19 @@ impl State {
             .find(|f| f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
 
+        let present_mode = surface_caps
+            .present_modes
+            .iter()
+            .copied()
+            .find(|&mode| mode == wgpu::PresentMode::Fifo)
+            .unwrap_or(surface_caps.present_modes[0]);
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             desired_maximum_frame_latency: 2,
             view_formats: vec![],
@@ -220,7 +247,7 @@ impl State {
             label: Some("camera_bind_group"),
         });
 
-        let camera_controller = camera::CameraController::new(0.2);
+        let camera_controller = camera::CameraController::new(12.0);
 
         let light_uniform = LightUniform {
             position: [20.0, 3.0, 5.0],
@@ -282,10 +309,17 @@ impl State {
             )
         };
 
-        let light_model =
-            assets::load_obj_model(&"cube.obj", &device, &queue, &texture_bind_group_layout)
-                .await
-                .unwrap();
+        let mut materials: Vec<model::Material> = Vec::new();
+
+        let light_model = assets::load_obj_model(
+            &"cube.obj",
+            &device,
+            &queue,
+            &texture_bind_group_layout,
+            &mut materials,
+        )
+        .await
+        .unwrap();
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -309,25 +343,14 @@ impl State {
                 &render_pipeline_layout,
                 config.format,
                 Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                &[model::ModelVertex::desc(), TransformRaw::desc()],
                 shader,
             )
         };
 
         let render_pipelines = vec![render_pipeline];
-
-        let instances = vec![Instance::new(
-            cgmath::Vector3::new(0.0, 0.0, 0.0),
-            cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0)),
-            cgmath::Vector3::new(1.0, 1.0, 1.0),
-        )];
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
+        let mut pipeline_registry = Registry::new();
+        pipeline_registry.register("standard", PipelineHandle(0));
 
         // let size = 25;
         // let params = heightmaps::perlin::FractalPerlinParams {
@@ -352,43 +375,51 @@ impl State {
         //     &queue,
         //     &texture_bind_group_layout,
         //     meshed,
+        //     &mut materials,
         // )
         // .await
         // .unwrap();
 
-        let terrain_model =
-            assets::load_heightmap_png("test_map.png", &device, &queue, &texture_bind_group_layout)
-                .await
-                .unwrap();
+        let terrain_model = assets::load_heightmap_png(
+            "test_map.png",
+            &device,
+            &queue,
+            &texture_bind_group_layout,
+            &mut materials,
+        )
+        .await
+        .unwrap();
+
+        let mut material_registry = Registry::new();
+        material_registry.register("terrain", terrain_model.meshes[0].material);
 
         let mut models = Vec::new();
-        let mut materials = Vec::new();
-        let mut models_by_name = HashMap::new();
+        let mut model_registry = Registry::new();
 
-        let mut terrain_model = terrain_model;
-        let material_map: Vec<usize> = terrain_model
-            .materials
-            .drain(..)
-            .enumerate()
-            .map(|(index, material)| {
-                materials.push(material);
-                index
-            })
-            .collect();
-
-        for mesh in terrain_model.meshes.iter_mut() {
-            mesh.material = material_map[mesh.material];
-        }
-
-        models_by_name.insert("terrain".to_string(), 0);
+        let terrain_handle = ModelHandle(models.len());
         models.push(terrain_model);
+        model_registry.register("terrain", terrain_handle);
 
-        let scene_objects = vec![SceneObject {
-            model_index: 0,
-            pipeline_id: PipelineId(0),
-            material_id: Some(MaterialId(0)),
-            instance_range: 0..instances.len() as u32,
-        }];
+        let mut scene = scene::Scene::new();
+        scene.spawn(Object {
+            model: terrain_handle,
+            pipeline: PipelineHandle(0),
+            material: None,
+            transform: Transform::identity(),
+        });
+
+        let mut instance_buffer = create_instance_buffer(&device, 0);
+        let mut instance_capacity = 0u32;
+        {
+            let (batched, _) = scene.batches();
+            sync_instance_buffer(
+                &device,
+                &queue,
+                &mut instance_buffer,
+                &mut instance_capacity,
+                &batched.instances,
+            );
+        }
 
         let camera_state = CameraState {
             camera,
@@ -408,13 +439,14 @@ impl State {
 
         let render_state = RenderState {
             render_pipelines,
+            pipeline_registry,
             depth_texture,
-            instances,
             instance_buffer,
+            instance_capacity,
             models,
-            models_by_name,
+            model_registry,
             materials,
-            scene_objects,
+            material_registry,
         };
 
         let egui_ctx = egui::Context::default();
@@ -444,6 +476,7 @@ impl State {
             config,
             is_surface_configured: false,
             window,
+            scene,
             camera: camera_state,
             render: render_state,
             light: light_state,
@@ -470,20 +503,6 @@ impl State {
         }
     }
 
-    fn sync_instance_buffer(&mut self) {
-        let instance_data = self
-            .render
-            .instances
-            .iter()
-            .map(Instance::to_raw)
-            .collect::<Vec<_>>();
-        self.queue.write_buffer(
-            &self.render.instance_buffer,
-            0,
-            bytemuck::cast_slice(&instance_data),
-        );
-    }
-
     pub(crate) fn update(&mut self) {
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame_time).as_secs_f32();
@@ -500,7 +519,7 @@ impl State {
 
         self.camera
             .camera_controller
-            .update_camera(&mut self.camera.camera);
+            .update_camera(&mut self.camera.camera, dt);
         self.camera
             .camera_uniform
             .update_view_proj(&self.camera.camera);
@@ -512,7 +531,10 @@ impl State {
 
         let old_position: cgmath::Vector3<_> = self.light.light_uniform.position.into();
         self.light.light_uniform.position =
-            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(0.5))
+            (cgmath::Quaternion::from_axis_angle(
+                (0.0, 1.0, 0.0).into(),
+                cgmath::Deg(LIGHT_ORBIT_DEG_PER_SEC * dt),
+            )
                 * old_position)
                 .into();
         self.queue.write_buffer(
@@ -520,7 +542,6 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.light.light_uniform]),
         );
-        self.sync_instance_buffer();
 
         // handle event
     }
@@ -531,35 +552,6 @@ impl State {
             .egui_state
             .on_window_event(&self.window, event);
         response.consumed
-    }
-
-    pub fn add_scene_object(
-        &mut self,
-        model_index: usize,
-        pipeline_id: PipelineId,
-        material_id: Option<MaterialId>,
-        instance: Instance,
-    ) {
-        let start = self.render.instances.len() as u32;
-        self.render.instances.push(instance);
-        self.render.scene_objects.push(SceneObject {
-            model_index,
-            pipeline_id,
-            material_id,
-            instance_range: start..start + 1,
-        });
-    }
-
-    pub fn add_scene_object_by_name(
-        &mut self,
-        model_name: &str,
-        pipeline_id: PipelineId,
-        material_id: Option<MaterialId>,
-        instance: Instance,
-    ) {
-        if let Some(&model_index) = self.render.models_by_name.get(model_name) {
-            self.add_scene_object(model_index, pipeline_id, material_id, instance);
-        }
     }
 
     pub(crate) fn render(&mut self) -> anyhow::Result<()> {
@@ -586,6 +578,17 @@ impl State {
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let (batched, changed) = self.scene.batches();
+        if changed {
+            sync_instance_buffer(
+                &self.device,
+                &self.queue,
+                &mut self.render.instance_buffer,
+                &mut self.render.instance_capacity,
+                &batched.instances,
+            );
+        }
 
         let mut encoder = self
             .device
@@ -623,9 +626,6 @@ impl State {
                 multiview_mask: None,
             });
 
-            render_pass.set_vertex_buffer(1, self.render.instance_buffer.slice(..));
-            render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
-
             render_pass.set_pipeline(&self.light.light_render_pipeline);
             render_pass.draw_light_model(
                 &self.light.light_model,
@@ -633,26 +633,32 @@ impl State {
                 &self.light.light_bind_group,
             );
 
+            render_pass.set_vertex_buffer(1, self.render.instance_buffer.slice(..));
             render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.light.light_bind_group, &[]);
 
-            validation::validate_uniform_struct_sizes();
+            let mut last_pipeline: Option<PipelineHandle> = None;
+            let mut last_material: Option<MaterialHandle> = None;
 
-            for object in &self.render.scene_objects {
-                render_pass.set_pipeline(&self.render.render_pipelines[object.pipeline_id.0]);
-                let model = &self.render.models[object.model_index];
+            for batch in &batched.batches {
+                if last_pipeline != Some(batch.pipeline) {
+                    render_pass.set_pipeline(&self.render.render_pipelines[batch.pipeline.0]);
+                    last_pipeline = Some(batch.pipeline);
+                }
+
+                let model = &self.render.models[batch.model.0];
                 for mesh in &model.meshes {
-                    let material_index = object.material_id.map(|id| id.0).unwrap_or(mesh.material);
-                    let material = &self.render.materials[material_index];
+                    let material_handle = batch.material.unwrap_or(mesh.material);
+                    if last_material != Some(material_handle) {
+                        let material = &self.render.materials[material_handle.0];
+                        render_pass.set_bind_group(0, &material.bind_group, &[]);
+                        last_material = Some(material_handle);
+                    }
+
                     render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                     render_pass
                         .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.set_bind_group(0, &material.bind_group, &[]);
-                    render_pass.set_bind_group(2, &self.light.light_bind_group, &[]);
-                    render_pass.draw_indexed(
-                        0..mesh.num_elements,
-                        0,
-                        object.instance_range.clone(),
-                    );
+                    render_pass.draw_indexed(0..mesh.num_elements, 0, batch.instance_range.clone());
                 }
             }
         }
