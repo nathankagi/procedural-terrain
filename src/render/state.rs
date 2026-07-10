@@ -1,4 +1,5 @@
 use std::os::raw;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -6,7 +7,7 @@ use super::camera;
 use super::model;
 use super::model::{DrawLight, Vertex};
 use super::pipeline::create_render_pipeline;
-use super::scene::{self, MaterialHandle, ModelHandle, Object, PipelineHandle};
+use super::scene::{self, Object};
 use super::texture;
 use super::transform::{Transform, TransformRaw};
 use crate::assets;
@@ -112,7 +113,7 @@ impl LightState {
         config: &wgpu::SurfaceConfiguration,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
-        materials: &mut Vec<model::Material>,
+        materials: &mut Vec<Rc<model::Material>>,
     ) -> anyhow::Result<(Self, wgpu::BindGroupLayout)> {
         let light_uniform = LightUniform {
             position: [20.0, 3.0, 5.0],
@@ -197,12 +198,12 @@ impl LightState {
 }
 
 struct RenderState {
-    render_pipelines: Vec<wgpu::RenderPipeline>,
+    render_pipelines: Vec<Rc<wgpu::RenderPipeline>>,
     depth_texture: texture::Texture,
     instance_buffer: wgpu::Buffer,
     instance_capacity: u32,
-    models: Vec<model::Model>,
-    materials: Vec<model::Material>,
+    models: Vec<Rc<model::Model>>,
+    materials: Vec<Rc<model::Material>>,
 }
 
 impl RenderState {
@@ -213,7 +214,7 @@ impl RenderState {
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
         light_bind_group_layout: &wgpu::BindGroupLayout,
-        mut materials: Vec<model::Material>,
+        mut materials: Vec<Rc<model::Material>>,
         scene: &mut scene::Scene,
     ) -> anyhow::Result<Self> {
         let depth_texture = texture::Texture::create_depth_texture(device, config, "depth_texture");
@@ -245,7 +246,8 @@ impl RenderState {
             )
         };
 
-        let render_pipelines = vec![render_pipeline];
+        let standard_pipeline = Rc::new(render_pipeline);
+        let render_pipelines = vec![standard_pipeline.clone()];
 
         let terrain_model = assets::load_heightmap_png(
             "test_map.png",
@@ -256,14 +258,12 @@ impl RenderState {
         )
         .await?;
 
-        let mut models = Vec::new();
-
-        let terrain_handle = ModelHandle(models.len());
-        models.push(terrain_model);
+        let terrain = Rc::new(terrain_model);
+        let models = vec![terrain.clone()];
 
         scene.spawn(Object {
-            model: terrain_handle,
-            pipeline: PipelineHandle(0),
+            model: terrain,
+            pipeline: standard_pipeline,
             material: None,
             transform: Transform::identity(),
         });
@@ -370,6 +370,10 @@ fn sync_instance_buffer(
     queue.write_buffer(buffer, 0, bytemuck::cast_slice(instances));
 }
 
+fn same_rc<T>(last: &Option<Rc<T>>, current: &Rc<T>) -> bool {
+    last.as_ref().map(|l| Rc::ptr_eq(l, current)).unwrap_or(false)
+}
+
 impl State {
     pub(crate) async fn new(window: Arc<Window>) -> anyhow::Result<State> {
         let size = window.inner_size();
@@ -462,7 +466,7 @@ impl State {
 
         let (camera_state, camera_bind_group_layout) = CameraState::new(&device, &config);
 
-        let mut materials: Vec<model::Material> = Vec::new();
+        let mut materials: Vec<Rc<model::Material>> = Vec::new();
 
         let (light_state, light_bind_group_layout) = LightState::new(
             &device,
@@ -574,31 +578,22 @@ impl State {
         response.consumed
     }
 
-    pub(crate) fn render(&mut self) -> anyhow::Result<()> {
-        self.window.request_redraw();
-
-        if !self.is_surface_configured {
-            return Ok(());
-        }
-
-        let output = self.surface.get_current_texture();
-        let surface_texture = match output {
+    fn acquire_surface_texture(&mut self) -> anyhow::Result<Option<wgpu::SurfaceTexture>> {
+        match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(surface_texture)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
-            wgpu::CurrentSurfaceTexture::Timeout => return Ok(()),
-            wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
+            | wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => Ok(Some(surface_texture)),
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => Ok(None),
             wgpu::CurrentSurfaceTexture::Outdated => {
                 self.surface.configure(&self.device, &self.config);
-                return Ok(());
+                Ok(None)
             }
             wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Validation => {
-                return Err(anyhow::anyhow!("Surface texture unavailable"));
+                Err(anyhow::anyhow!("Surface texture unavailable"))
             }
-        };
-        let view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        }
+    }
 
+    fn draw_scene(&mut self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
         let (batched, changed) = self.scene.batches();
         if changed {
             sync_instance_buffer(
@@ -610,79 +605,70 @@ impl State {
             );
         }
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.render.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
                     }),
-                    stencil_ops: None,
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.render.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
                 }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
+                stencil_ops: None,
+            }),
+            occlusion_query_set: None,
+            timestamp_writes: None,
+            multiview_mask: None,
+        });
 
-            render_pass.set_pipeline(&self.light.light_render_pipeline);
-            render_pass.draw_light_model(
-                &self.light.light_model,
-                &self.camera.camera_bind_group,
-                &self.light.light_bind_group,
-            );
+        render_pass.set_pipeline(&self.light.light_render_pipeline);
+        render_pass.draw_light_model(
+            &self.light.light_model,
+            &self.camera.camera_bind_group,
+            &self.light.light_bind_group,
+        );
 
-            render_pass.set_vertex_buffer(1, self.render.instance_buffer.slice(..));
-            render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
-            render_pass.set_bind_group(2, &self.light.light_bind_group, &[]);
+        render_pass.set_vertex_buffer(1, self.render.instance_buffer.slice(..));
+        render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
+        render_pass.set_bind_group(2, &self.light.light_bind_group, &[]);
 
-            let mut last_pipeline: Option<PipelineHandle> = None;
-            let mut last_material: Option<MaterialHandle> = None;
+        let mut last_pipeline: Option<Rc<wgpu::RenderPipeline>> = None;
+        let mut last_material: Option<Rc<model::Material>> = None;
 
-            for batch in &batched.batches {
-                if last_pipeline != Some(batch.pipeline) {
-                    render_pass.set_pipeline(&self.render.render_pipelines[batch.pipeline.0]);
-                    last_pipeline = Some(batch.pipeline);
+        for batch in &batched.batches {
+            if !same_rc(&last_pipeline, &batch.pipeline) {
+                render_pass.set_pipeline(&batch.pipeline);
+                last_pipeline = Some(batch.pipeline.clone());
+            }
+
+            for mesh in &batch.model.meshes {
+                let material = batch.material.clone().unwrap_or_else(|| mesh.material.clone());
+                if !same_rc(&last_material, &material) {
+                    render_pass.set_bind_group(0, &material.bind_group, &[]);
+                    last_material = Some(material.clone());
                 }
 
-                let model = &self.render.models[batch.model.0];
-                for mesh in &model.meshes {
-                    let material_handle = batch.material.unwrap_or(mesh.material);
-                    if last_material != Some(material_handle) {
-                        let material = &self.render.materials[material_handle.0];
-                        render_pass.set_bind_group(0, &material.bind_group, &[]);
-                        last_material = Some(material_handle);
-                    }
-
-                    render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                    render_pass
-                        .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..mesh.num_elements, 0, batch.instance_range.clone());
-                }
+                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..mesh.num_elements, 0, batch.instance_range.clone());
             }
         }
+    }
 
+    fn draw_egui(&mut self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
         let raw_input = self.gui_state.egui_state.take_egui_input(&self.window);
         let egui_output = self.gui_state.egui_ctx.run_ui(raw_input, |ctx| {
             egui::Window::new("Debug")
@@ -717,7 +703,7 @@ impl State {
         self.gui_state.egui_renderer.update_buffers(
             &self.device,
             &self.queue,
-            &mut encoder,
+            encoder,
             &tris,
             &screen_descriptor,
         );
@@ -726,7 +712,7 @@ impl State {
             let egui_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("egui pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -750,6 +736,30 @@ impl State {
         for id in &egui_output.textures_delta.free {
             self.gui_state.egui_renderer.free_texture(id);
         }
+    }
+
+    pub(crate) fn render(&mut self) -> anyhow::Result<()> {
+        self.window.request_redraw();
+
+        if !self.is_surface_configured {
+            return Ok(());
+        }
+
+        let Some(surface_texture) = self.acquire_surface_texture()? else {
+            return Ok(());
+        };
+        let view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        self.draw_scene(&mut encoder, &view);
+        self.draw_egui(&mut encoder, &view);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();

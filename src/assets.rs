@@ -2,10 +2,10 @@ use cgmath::InnerSpace;
 use image;
 use std::io::{BufReader, Cursor};
 use std::path::Path;
+use std::rc::Rc;
 use wgpu::util::DeviceExt;
 
 use crate::model;
-use crate::render::scene::MaterialHandle;
 use crate::render::texture;
 use crate::sim::r#gen::lib::HeightMapMesh;
 
@@ -70,7 +70,7 @@ pub async fn model_from_mesh(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
     meshed: HeightMapMesh,
-    materials: &mut Vec<model::Material>,
+    materials: &mut Vec<Rc<model::Material>>,
 ) -> anyhow::Result<model::Model> {
     let vertices: Vec<model::ModelVertex> = meshed
         .vertices
@@ -113,12 +113,12 @@ pub async fn model_from_mesh(
         label: None,
     });
 
-    let material = MaterialHandle(materials.len());
-    materials.push(model::Material {
+    let material = Rc::new(model::Material {
         name: file_name.to_string(),
         diffuse_texture,
         bind_group,
     });
+    materials.push(material.clone());
 
     Ok(model::Model {
         meshes: vec![model::Mesh {
@@ -136,7 +136,7 @@ pub async fn load_heightmap_png(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
-    materials: &mut Vec<model::Material>,
+    materials: &mut Vec<Rc<model::Material>>,
 ) -> anyhow::Result<model::Model> {
     let png_data = load_binary(file_name).await?;
 
@@ -240,12 +240,12 @@ pub async fn load_heightmap_png(
         label: None,
     });
 
-    let material = MaterialHandle(materials.len());
-    materials.push(model::Material {
+    let material = Rc::new(model::Material {
         name: file_name.to_string(),
         diffuse_texture,
         bind_group,
     });
+    materials.push(material.clone());
 
     Ok(model::Model {
         meshes: vec![model::Mesh {
@@ -263,7 +263,7 @@ pub async fn load_obj_model(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
-    materials: &mut Vec<model::Material>,
+    materials: &mut Vec<Rc<model::Material>>,
 ) -> anyhow::Result<model::Model> {
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
@@ -282,7 +282,7 @@ pub async fn load_obj_model(
         },
     )?;
 
-    let mut material_handles = Vec::new();
+    let mut loaded_materials: Vec<Rc<model::Material>> = Vec::new();
     for m in obj_materials? {
         let diffuse_texture = load_texture(&m.diffuse_texture, device, queue).await?;
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -300,14 +300,15 @@ pub async fn load_obj_model(
             label: None,
         });
 
-        material_handles.push(MaterialHandle(materials.len()));
-        materials.push(model::Material {
+        let material = Rc::new(model::Material {
             name: m.name,
             diffuse_texture,
             bind_group,
         });
+        materials.push(material.clone());
+        loaded_materials.push(material);
     }
-    let default_material = material_handles.first().copied();
+    let default_material = loaded_materials.first().cloned();
 
     let meshes = models
         .into_iter()
@@ -367,8 +368,8 @@ pub async fn load_obj_model(
                 material: m
                     .mesh
                     .material_id
-                    .and_then(|id| material_handles.get(id).copied())
-                    .or(default_material)
+                    .and_then(|id| loaded_materials.get(id).cloned())
+                    .or_else(|| default_material.clone())
                     .expect("obj model has no materials"),
             }
         })

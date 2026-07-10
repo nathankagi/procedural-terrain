@@ -1,16 +1,9 @@
 use std::collections::HashMap;
 use std::ops::Range;
+use std::rc::Rc;
 
+use super::model::{Material, Model};
 use super::transform::{Transform, TransformRaw};
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ModelHandle(pub usize);
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct PipelineHandle(pub usize);
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MaterialHandle(pub usize);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EntityId(u64);
@@ -28,19 +21,19 @@ impl EntityAllocator {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Object {
-    pub model: ModelHandle,
-    pub pipeline: PipelineHandle,
-    pub material: Option<MaterialHandle>,
+    pub model: Rc<Model>,
+    pub pipeline: Rc<wgpu::RenderPipeline>,
+    pub material: Option<Rc<Material>>,
     pub transform: Transform,
 }
 
 #[derive(Debug)]
 pub struct Batch {
-    pub model: ModelHandle,
-    pub pipeline: PipelineHandle,
-    pub material: Option<MaterialHandle>,
+    pub model: Rc<Model>,
+    pub pipeline: Rc<wgpu::RenderPipeline>,
+    pub material: Option<Rc<Material>>,
     pub instance_range: Range<u32>,
 }
 
@@ -105,27 +98,34 @@ impl Scene {
 }
 
 fn build_batches(objects: &HashMap<EntityId, Object>) -> BatchedScene {
-    let mut groups: HashMap<(ModelHandle, PipelineHandle, Option<MaterialHandle>), Vec<EntityId>> =
-        HashMap::new();
+    let mut groups: HashMap<(usize, usize, Option<usize>), Vec<EntityId>> = HashMap::new();
     for (&id, object) in objects {
-        groups
-            .entry((object.model, object.pipeline, object.material))
-            .or_default()
-            .push(id);
+        let key = (
+            Rc::as_ptr(&object.model) as usize,
+            Rc::as_ptr(&object.pipeline) as usize,
+            object.material.as_ref().map(|m| Rc::as_ptr(m) as usize),
+        );
+        groups.entry(key).or_default().push(id);
     }
 
     let mut groups: Vec<_> = groups.into_iter().collect();
-    groups.sort_by_key(|(key, _)| (key.1.0, key.2.map(|m| m.0), key.0.0));
+    groups.sort_by_key(|(key, _)| (key.1, key.2, key.0));
 
     let mut instances = Vec::new();
     let mut batches = Vec::with_capacity(groups.len());
 
-    for ((model, pipeline, material), entities) in groups {
+    for (_, entities) in groups {
+        let representative = &objects[&entities[0]];
+        let model = representative.model.clone();
+        let pipeline = representative.pipeline.clone();
+        let material = representative.material.clone();
+
         let start = instances.len() as u32;
-        for id in entities {
-            instances.push(objects[&id].transform.to_raw());
+        for id in &entities {
+            instances.push(objects[id].transform.to_raw());
         }
         let end = instances.len() as u32;
+
         batches.push(Batch {
             model,
             pipeline,

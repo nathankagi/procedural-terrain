@@ -1,6 +1,6 @@
 use std::ops::Range;
+use std::rc::Rc;
 
-use super::scene::MaterialHandle;
 use super::texture;
 
 pub trait Vertex {
@@ -42,6 +42,7 @@ impl Vertex for ModelVertex {
     }
 }
 
+#[derive(Debug)]
 pub struct Material {
     #[allow(unused)]
     pub name: String,
@@ -50,15 +51,17 @@ pub struct Material {
     pub bind_group: wgpu::BindGroup,
 }
 
+#[derive(Debug)]
 pub struct Mesh {
     #[allow(unused)]
     pub name: String,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
-    pub material: MaterialHandle,
+    pub material: Rc<Material>,
 }
 
+#[derive(Debug)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
 }
