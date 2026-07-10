@@ -12,32 +12,6 @@ pub struct PipelineHandle(pub usize);
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MaterialHandle(pub usize);
 
-pub struct Registry<H> {
-    by_name: HashMap<String, H>,
-}
-
-impl<H> Default for Registry<H> {
-    fn default() -> Self {
-        Self {
-            by_name: HashMap::new(),
-        }
-    }
-}
-
-impl<H: Copy> Registry<H> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn register(&mut self, name: impl Into<String>, handle: H) {
-        self.by_name.insert(name.into(), handle);
-    }
-
-    pub fn get(&self, name: &str) -> Option<H> {
-        self.by_name.get(name).copied()
-    }
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EntityId(u64);
 

@@ -6,12 +6,13 @@ use super::camera;
 use super::model;
 use super::model::{DrawLight, Vertex};
 use super::pipeline::create_render_pipeline;
-use super::scene::{self, MaterialHandle, ModelHandle, Object, PipelineHandle, Registry};
+use super::scene::{self, MaterialHandle, ModelHandle, Object, PipelineHandle};
 use super::texture;
 use super::transform::{Transform, TransformRaw};
 use crate::assets;
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
+use winit::event::MouseButton;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
@@ -46,14 +47,11 @@ struct LightState {
 
 struct RenderState {
     render_pipelines: Vec<wgpu::RenderPipeline>,
-    pipeline_registry: Registry<PipelineHandle>,
     depth_texture: texture::Texture,
     instance_buffer: wgpu::Buffer,
     instance_capacity: u32,
     models: Vec<model::Model>,
-    model_registry: Registry<ModelHandle>,
     materials: Vec<model::Material>,
-    material_registry: Registry<MaterialHandle>,
 }
 
 struct GuiState {
@@ -76,6 +74,7 @@ pub struct State {
     light: LightState,
     gui_state: GuiState,
     last_frame_time: Instant,
+    last_cursor_pos: Option<(f64, f64)>,
     fps: f32,
 }
 
@@ -247,7 +246,7 @@ impl State {
             label: Some("camera_bind_group"),
         });
 
-        let camera_controller = camera::CameraController::new(12.0);
+        let camera_controller = camera::CameraController::Orbit(camera::OrbitCamera::new());
 
         let light_uniform = LightUniform {
             position: [20.0, 3.0, 5.0],
@@ -349,8 +348,6 @@ impl State {
         };
 
         let render_pipelines = vec![render_pipeline];
-        let mut pipeline_registry = Registry::new();
-        pipeline_registry.register("standard", PipelineHandle(0));
 
         // let size = 25;
         // let params = heightmaps::perlin::FractalPerlinParams {
@@ -390,15 +387,10 @@ impl State {
         .await
         .unwrap();
 
-        let mut material_registry = Registry::new();
-        material_registry.register("terrain", terrain_model.meshes[0].material);
-
         let mut models = Vec::new();
-        let mut model_registry = Registry::new();
 
         let terrain_handle = ModelHandle(models.len());
         models.push(terrain_model);
-        model_registry.register("terrain", terrain_handle);
 
         let mut scene = scene::Scene::new();
         scene.spawn(Object {
@@ -439,14 +431,11 @@ impl State {
 
         let render_state = RenderState {
             render_pipelines,
-            pipeline_registry,
             depth_texture,
             instance_buffer,
             instance_capacity,
             models,
-            model_registry,
             materials,
-            material_registry,
         };
 
         let egui_ctx = egui::Context::default();
@@ -482,6 +471,7 @@ impl State {
             light: light_state,
             gui_state: gui_state,
             last_frame_time: Instant::now(),
+            last_cursor_pos: None,
             fps: 0.0,
         };
 
@@ -500,6 +490,8 @@ impl State {
 
             self.render.depth_texture =
                 texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
+
+            self.camera.camera.aspect = width as f32 / height as f32;
         }
     }
 
@@ -519,7 +511,7 @@ impl State {
 
         self.camera
             .camera_controller
-            .update_camera(&mut self.camera.camera, dt);
+            .update(&mut self.camera.camera, dt);
         self.camera
             .camera_uniform
             .update_view_proj(&self.camera.camera);
@@ -530,13 +522,11 @@ impl State {
         );
 
         let old_position: cgmath::Vector3<_> = self.light.light_uniform.position.into();
-        self.light.light_uniform.position =
-            (cgmath::Quaternion::from_axis_angle(
-                (0.0, 1.0, 0.0).into(),
-                cgmath::Deg(LIGHT_ORBIT_DEG_PER_SEC * dt),
-            )
-                * old_position)
-                .into();
+        self.light.light_uniform.position = (cgmath::Quaternion::from_axis_angle(
+            (0.0, 1.0, 0.0).into(),
+            cgmath::Deg(LIGHT_ORBIT_DEG_PER_SEC * dt),
+        ) * old_position)
+            .into();
         self.queue.write_buffer(
             &self.light.light_buffer,
             0,
@@ -748,5 +738,28 @@ impl State {
         } else {
             self.camera.camera_controller.handle_key(code, is_pressed);
         }
+    }
+
+    pub(crate) fn handle_mouse_button(&mut self, button: MouseButton, is_pressed: bool) -> bool {
+        self.camera
+            .camera_controller
+            .handle_mouse_button(button, is_pressed)
+    }
+
+    pub(crate) fn handle_mouse_motion(&mut self, x: f64, y: f64) {
+        if let Some((last_x, last_y)) = self.last_cursor_pos {
+            self.camera.camera_controller.handle_mouse_motion(
+                &mut self.camera.camera,
+                x - last_x,
+                y - last_y,
+            );
+        }
+        self.last_cursor_pos = Some((x, y));
+    }
+
+    pub(crate) fn handle_scroll(&mut self, delta: f32) {
+        self.camera
+            .camera_controller
+            .handle_scroll(&mut self.camera.camera, delta);
     }
 }

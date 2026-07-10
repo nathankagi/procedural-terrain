@@ -116,11 +116,23 @@ impl ApplicationHandler<State> for App {
                     }
                 }
             }
-            WindowEvent::MouseInput { state, button, .. } => match (button, state.is_pressed()) {
-                (MouseButton::Left, true) => {}
-                (MouseButton::Left, false) => {}
-                _ => {}
-            },
+            WindowEvent::MouseInput {
+                state: button_state,
+                button,
+                ..
+            } => {
+                state.handle_mouse_button(button, button_state.is_pressed());
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                state.handle_mouse_motion(position.x, position.y);
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let scroll = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(pos) => (pos.y / 100.0) as f32,
+                };
+                state.handle_scroll(scroll);
+            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
