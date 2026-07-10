@@ -1,4 +1,3 @@
-use std::os::raw;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -780,10 +779,10 @@ impl State {
         }
     }
 
-    pub(crate) fn handle_mouse_button(&mut self, button: MouseButton, is_pressed: bool) -> bool {
+    pub(crate) fn handle_mouse_button(&mut self, button: MouseButton, is_pressed: bool) {
         self.camera
             .camera_controller
-            .handle_mouse_button(button, is_pressed)
+            .handle_mouse_button(button, is_pressed);
     }
 
     pub(crate) fn handle_mouse_motion(&mut self, x: f64, y: f64) {

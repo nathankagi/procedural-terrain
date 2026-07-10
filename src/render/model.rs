@@ -44,16 +44,13 @@ impl Vertex for ModelVertex {
 
 #[derive(Debug)]
 pub struct Material {
-    #[allow(unused)]
     pub name: String,
-    #[allow(unused)]
     pub diffuse_texture: texture::Texture,
     pub bind_group: wgpu::BindGroup,
 }
 
 #[derive(Debug)]
 pub struct Mesh {
-    #[allow(unused)]
     pub name: String,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,

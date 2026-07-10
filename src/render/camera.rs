@@ -56,14 +56,14 @@ pub enum CameraController {
 }
 
 impl CameraController {
-    pub fn handle_key(&mut self, code: KeyCode, pressed: bool) -> bool {
+    pub fn handle_key(&mut self, code: KeyCode, pressed: bool) {
         match self {
             CameraController::Static(c) => c.handle_key(code, pressed),
             CameraController::Orbit(c) => c.handle_key(code, pressed),
         }
     }
 
-    pub fn handle_mouse_button(&mut self, button: MouseButton, pressed: bool) -> bool {
+    pub fn handle_mouse_button(&mut self, button: MouseButton, pressed: bool) {
         match self {
             CameraController::Static(c) => c.handle_mouse_button(button, pressed),
             CameraController::Orbit(c) => c.handle_mouse_button(button, pressed),
@@ -99,13 +99,9 @@ impl StaticCamera {
         Self
     }
 
-    pub fn handle_key(&mut self, _code: KeyCode, _pressed: bool) -> bool {
-        false
-    }
+    pub fn handle_key(&mut self, _code: KeyCode, _pressed: bool) {}
 
-    pub fn handle_mouse_button(&mut self, _button: MouseButton, _pressed: bool) -> bool {
-        false
-    }
+    pub fn handle_mouse_button(&mut self, _button: MouseButton, _pressed: bool) {}
 
     pub fn handle_mouse_motion(&mut self, _camera: &mut Camera, _dx: f64, _dy: f64) {}
 
@@ -141,22 +137,15 @@ impl OrbitCamera {
         }
     }
 
-    pub fn handle_key(&mut self, code: KeyCode, pressed: bool) -> bool {
-        match code {
-            KeyCode::ShiftLeft | KeyCode::ShiftRight => {
-                self.is_shift_held = pressed;
-                true
-            }
-            _ => false,
+    pub fn handle_key(&mut self, code: KeyCode, pressed: bool) {
+        if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight) {
+            self.is_shift_held = pressed;
         }
     }
 
-    pub fn handle_mouse_button(&mut self, button: MouseButton, pressed: bool) -> bool {
+    pub fn handle_mouse_button(&mut self, button: MouseButton, pressed: bool) {
         if button == MouseButton::Right {
             self.is_dragging = pressed;
-            true
-        } else {
-            false
         }
     }
 
