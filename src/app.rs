@@ -99,7 +99,6 @@ impl ApplicationHandler<State> for App {
             None => return,
         };
 
-        // Let the state (UI) consume the event first, if it wants to.
         if state.handle_event(&event) {
             return;
         }

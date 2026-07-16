@@ -131,13 +131,27 @@ pub async fn model_from_mesh(
     })
 }
 
+pub struct TerrainHeights {
+    pub heights: Vec<f32>,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl TerrainHeights {
+    pub fn sample(&self, x: f32, z: f32) -> f32 {
+        let xi = x.round().clamp(0.0, (self.width - 1) as f32) as u32;
+        let zi = z.round().clamp(0.0, (self.height - 1) as f32) as u32;
+        self.heights[(zi * self.width + xi) as usize]
+    }
+}
+
 pub async fn load_heightmap_png(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
     materials: &mut Vec<Rc<model::Material>>,
-) -> anyhow::Result<model::Model> {
+) -> anyhow::Result<(model::Model, TerrainHeights)> {
     let png_data = load_binary(file_name).await?;
 
     let png = image::load_from_memory(&png_data)?;
@@ -247,15 +261,22 @@ pub async fn load_heightmap_png(
     });
     materials.push(material.clone());
 
-    Ok(model::Model {
-        meshes: vec![model::Mesh {
-            name: file_name.to_string(),
-            vertex_buffer,
-            index_buffer,
-            num_elements: indices.len() as u32,
-            material,
-        }],
-    })
+    Ok((
+        model::Model {
+            meshes: vec![model::Mesh {
+                name: file_name.to_string(),
+                vertex_buffer,
+                index_buffer,
+                num_elements: indices.len() as u32,
+                material,
+            }],
+        },
+        TerrainHeights {
+            heights,
+            width,
+            height,
+        },
+    ))
 }
 
 pub async fn load_obj_model(

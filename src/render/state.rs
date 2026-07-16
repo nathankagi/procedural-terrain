@@ -197,11 +197,13 @@ impl LightState {
 }
 
 struct RenderState {
-    render_pipelines: Vec<Rc<wgpu::RenderPipeline>>,
+    standard_pipeline: Rc<wgpu::RenderPipeline>,
+    terrain_pipeline: Rc<wgpu::RenderPipeline>,
     depth_texture: texture::Texture,
     instance_buffer: wgpu::Buffer,
     instance_capacity: u32,
-    models: Vec<Rc<model::Model>>,
+    terrain_model: Rc<model::Model>,
+    tree_model: Rc<model::Model>,
     materials: Vec<Rc<model::Material>>,
 }
 
@@ -214,8 +216,7 @@ impl RenderState {
         camera_bind_group_layout: &wgpu::BindGroupLayout,
         light_bind_group_layout: &wgpu::BindGroupLayout,
         mut materials: Vec<Rc<model::Material>>,
-        scene: &mut scene::Scene,
-    ) -> anyhow::Result<Self> {
+    ) -> anyhow::Result<(Self, assets::TerrainHeights)> {
         let depth_texture = texture::Texture::create_depth_texture(device, config, "depth_texture");
 
         let render_pipeline_layout =
@@ -246,9 +247,25 @@ impl RenderState {
         };
 
         let standard_pipeline = Rc::new(render_pipeline);
-        let render_pipelines = vec![standard_pipeline.clone()];
 
-        let terrain_model = assets::load_heightmap_png(
+        let terrain_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Terrain Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/terrain.wgsl").into()),
+            };
+
+            create_render_pipeline(
+                device,
+                &render_pipeline_layout,
+                config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), TransformRaw::desc()],
+                shader,
+            )
+        };
+        let terrain_pipeline = Rc::new(terrain_pipeline);
+
+        let (terrain_model, terrain_heights) = assets::load_heightmap_png(
             "test_map.png",
             device,
             queue,
@@ -256,38 +273,34 @@ impl RenderState {
             &mut materials,
         )
         .await?;
+        let terrain_model = Rc::new(terrain_model);
 
-        let terrain = Rc::new(terrain_model);
-        let models = vec![terrain.clone()];
+        let tree_model = assets::load_obj_model(
+            "tree.obj",
+            device,
+            queue,
+            texture_bind_group_layout,
+            &mut materials,
+        )
+        .await?;
+        let tree_model = Rc::new(tree_model);
 
-        scene.spawn(Object {
-            model: terrain,
-            pipeline: standard_pipeline,
-            material: None,
-            transform: Transform::identity(),
-        });
+        let instance_buffer = create_instance_buffer(device, 0);
+        let instance_capacity = 0u32;
 
-        let mut instance_buffer = create_instance_buffer(device, 0);
-        let mut instance_capacity = 0u32;
-        {
-            let (batched, _) = scene.batches();
-            sync_instance_buffer(
-                device,
-                queue,
-                &mut instance_buffer,
-                &mut instance_capacity,
-                &batched.instances,
-            );
-        }
-
-        Ok(Self {
-            render_pipelines,
-            depth_texture,
-            instance_buffer,
-            instance_capacity,
-            models,
-            materials,
-        })
+        Ok((
+            Self {
+                standard_pipeline,
+                terrain_pipeline,
+                depth_texture,
+                instance_buffer,
+                instance_capacity,
+                terrain_model,
+                tree_model,
+                materials,
+            },
+            terrain_heights,
+        ))
     }
 }
 
@@ -379,7 +392,7 @@ impl State {
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::PRIMARY.with_env(),
             #[cfg(target_arch = "wasm32")]
             backends: wgpu::Backends::GL,
             flags: wgpu::InstanceFlags::default(),
@@ -479,7 +492,7 @@ impl State {
 
         let mut scene = scene::Scene::new();
 
-        let render_state = RenderState::new(
+        let (mut render_state, terrain_heights) = RenderState::new(
             &device,
             &queue,
             &config,
@@ -487,9 +500,67 @@ impl State {
             &camera_bind_group_layout,
             &light_bind_group_layout,
             materials,
-            &mut scene,
         )
         .await?;
+
+        scene.spawn(Object {
+            model: render_state.terrain_model.clone(),
+            pipeline: render_state.terrain_pipeline.clone(),
+            material: None,
+            transform: Transform::identity(),
+        });
+
+        {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            const NUM_CLUMPS: usize = 4;
+            const TREES_PER_CLUMP: usize = 6;
+            const CLUMP_RADIUS: f32 = 2.5;
+
+            let min_bound = 1.0;
+            let max_x = (terrain_heights.width as f32 - 2.0).max(min_bound);
+            let max_z = (terrain_heights.height as f32 - 2.0).max(min_bound);
+
+            for _ in 0..NUM_CLUMPS {
+                let clump_x = rng.gen_range(min_bound..max_x);
+                let clump_z = rng.gen_range(min_bound..max_z);
+
+                for _ in 0..TREES_PER_CLUMP {
+                    let x = (clump_x + rng.gen_range(-CLUMP_RADIUS..CLUMP_RADIUS))
+                        .clamp(min_bound, max_x);
+                    let z = (clump_z + rng.gen_range(-CLUMP_RADIUS..CLUMP_RADIUS))
+                        .clamp(min_bound, max_z);
+                    let y = terrain_heights.sample(x, z);
+
+                    let rotation =
+                        cgmath::Quaternion::from_angle_y(cgmath::Deg(rng.gen_range(0.0..360.0)));
+                    let scale = rng.gen_range(0.16..0.26);
+
+                    scene.spawn(Object {
+                        model: render_state.tree_model.clone(),
+                        pipeline: render_state.standard_pipeline.clone(),
+                        material: None,
+                        transform: Transform::new(
+                            cgmath::Vector3::new(x, y, z),
+                            rotation,
+                            cgmath::Vector3::new(scale, scale, scale),
+                        ),
+                    });
+                }
+            }
+        }
+
+        {
+            let (batched, _) = scene.batches();
+            sync_instance_buffer(
+                &device,
+                &queue,
+                &mut render_state.instance_buffer,
+                &mut render_state.instance_capacity,
+                &batched.instances,
+            );
+        }
 
         let gui_state = GuiState::new(&device, &config, &window);
 
