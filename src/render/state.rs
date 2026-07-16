@@ -38,7 +38,10 @@ struct CameraState {
 }
 
 impl CameraState {
-    fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (Self, wgpu::BindGroupLayout) {
+    fn new(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> (Self, wgpu::BindGroupLayout) {
         let camera = camera::Camera {
             eye: (0.0, 1.0, 2.0).into(),
             target: (0.0, 0.0, 0.0).into(),
@@ -383,7 +386,9 @@ fn sync_instance_buffer(
 }
 
 fn same_rc<T>(last: &Option<Rc<T>>, current: &Rc<T>) -> bool {
-    last.as_ref().map(|l| Rc::ptr_eq(l, current)).unwrap_or(false)
+    last.as_ref()
+        .map(|l| Rc::ptr_eq(l, current))
+        .unwrap_or(false)
 }
 
 impl State {
@@ -652,7 +657,9 @@ impl State {
         match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(surface_texture)
             | wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => Ok(Some(surface_texture)),
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => Ok(None),
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                Ok(None)
+            }
             wgpu::CurrentSurfaceTexture::Outdated => {
                 self.surface.configure(&self.device, &self.config);
                 Ok(None)
@@ -725,14 +732,18 @@ impl State {
             }
 
             for mesh in &batch.model.meshes {
-                let material = batch.material.clone().unwrap_or_else(|| mesh.material.clone());
+                let material = batch
+                    .material
+                    .clone()
+                    .unwrap_or_else(|| mesh.material.clone());
                 if !same_rc(&last_material, &material) {
                     render_pass.set_bind_group(0, &material.bind_group, &[]);
                     last_material = Some(material.clone());
                 }
 
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass
+                    .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.draw_indexed(0..mesh.num_elements, 0, batch.instance_range.clone());
             }
         }
